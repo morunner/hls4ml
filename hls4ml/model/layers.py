@@ -1555,6 +1555,12 @@ class Bidirectional(Layer):
                 self.add_weights_variable(name=f'{dir}_recurrent_bias', var_name=(f'br_{dir[0]}_' + '{index}'))
 
 
+class GarNetLayer(Layer):
+    def initialize(self):
+        shape = [self.attributes['V']]
+        self.add_output_variable(shape)
+
+
 class GarNet(Layer):
     ref_impl = False
 
@@ -1839,6 +1845,7 @@ layer_map = {
     'QLSTM': LSTM,
     'QGRU': GRU,
     'TimeDistributed': TimeDistributed,
+    'GarNetLayer': GarNetLayer,
     'GarNet': GarNet,
     'GarNetStack': GarNetStack,
     'Quant': Quant,

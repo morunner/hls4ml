@@ -7,6 +7,7 @@ from collections.abc import Iterable
 import numpy as np
 
 from hls4ml.backends.backend import Backend
+from hls4ml.contrib.garnet_v2 import GarNetLayer
 from hls4ml.model.attributes import Attribute, ChoiceAttribute, ConfigurableAttribute, TypeAttribute
 from hls4ml.model.layers import (
     GRU,
@@ -88,6 +89,7 @@ class FPGABackend(Backend):
             BatchNormalization,
             Activation,
             Embedding,
+            GarNetLayer,
             GarNet,
             GarNetStack,
             Quant,

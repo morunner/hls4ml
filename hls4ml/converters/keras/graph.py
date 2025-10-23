@@ -2,6 +2,23 @@ from hls4ml.converters.keras_v2_to_hls import get_weights_data, keras_handler, p
 from hls4ml.model.quantizers import TernaryQuantizer
 
 
+@keras_handler('GarNetLayer')
+def parse_garnet_layer_v2(keras_layer, input_names, input_shapes, data_reader):
+    assert keras_layer['class_name'] == 'GarNetLayer'
+    layer = parse_default_keras_layer(keras_layer, input_names)
+
+    layer['V'] = keras_layer['config']['V']  # Number of vertices (hits)
+    layer['S'] = keras_layer['config']['S']  # Number of aggregators per vertex (hit)
+    layer['N'] = keras_layer['config']['N']  # Number of encoded features per vertex
+    layer['max_dist_input'] = keras_layer['config']['max_dist_input']  # Maximum distance input received during training
+    layer['exp_table_resolution'] = (
+        keras_layer['config']['exp_table_resolution'] if 'exp_table_resolution' in keras_layer['config'] else None
+    )
+
+    output_shape = [input_shapes[0][1]]
+    return layer, output_shape
+
+
 @keras_handler('GarNet', 'GarNetStack')
 def parse_garnet_layer(keras_layer, input_names, input_shapes, data_reader):
     assert keras_layer['class_name'] in ['GarNet', 'GarNetStack']

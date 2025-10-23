@@ -83,7 +83,7 @@ class FunctionCallTemplate(Template):
         name += '_function_template'
         super().__init__(name, layer_class, 'function_cpp')
         if include_header is None:
-            self.include_header = ()
+            self.include_header = []
         else:
             self.include_header = include_header
 
