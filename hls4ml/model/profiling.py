@@ -10,7 +10,7 @@ import pandas
 import seaborn as sb
 
 from hls4ml.model.graph import ModelGraph
-from hls4ml.model.layers import GRU, LSTM, SeparableConv1D, SeparableConv2D
+from hls4ml.model.layers import GRU, LSTM, GarNet, GarNetStack, SeparableConv1D, SeparableConv2D
 
 try:
     import keras
@@ -206,6 +206,33 @@ def types_hlsmodel(model):
             suffix = ['w', 'rw', 'b', 'rb']
         elif isinstance(layer, SeparableConv1D) or isinstance(layer, SeparableConv2D):
             suffix = ['dw', 'pw', 'db', 'pb']
+        elif isinstance(layer, GarNet):
+            suffix = [
+                'itw',
+                'itb',
+                'adw',
+                'adb',
+                'otw',
+                'otb'
+            ]
+        elif isinstance(layer, GarNetStack):
+            suffix = [
+                'it0w',
+                'it0b',
+                'ad0w',
+                'ad0b',
+                'ot0b',
+                'it1w',
+                'it1b',
+                'ad1w',
+                'ad1b',
+                'ot1b',
+                'it2w',
+                'it2b',
+                'ad2w',
+                'ad2b',
+                'ot2b',
+            ]
         else:
             suffix = ['w', 'b']
         for iw, weight in enumerate(layer.get_weights()):
@@ -249,6 +276,33 @@ def weights_hlsmodel(model, fmt='longform', plot='boxplot'):
             suffix = ['w', 'rw', 'b', 'rb']
         elif isinstance(layer, SeparableConv1D) or isinstance(layer, SeparableConv2D):
             suffix = ['dw', 'pw', 'db', 'pb']
+        elif isinstance(layer, GarNet):
+            suffix = [
+                'itw',
+                'itb',
+                'adw',
+                'adb',
+                'otw',
+                'otb'
+            ]
+        elif isinstance(layer, GarNetStack):
+            suffix = [
+                'it0w',
+                'it0b',
+                'ad0w',
+                'ad0b',
+                'ot0b',
+                'it1w',
+                'it1b',
+                'ad1w',
+                'ad1b',
+                'ot1b',
+                'it2w',
+                'it2b',
+                'ad2w',
+                'ad2b',
+                'ot2b',
+            ]
         else:
             suffix = ['w', 'b']
         name = layer.name
@@ -258,8 +312,8 @@ def weights_hlsmodel(model, fmt='longform', plot='boxplot'):
             w = abs(w[w != 0])
             n = len(w)
             if n == 0:
-                print(f'Weights for {name} are only zeros, ignoring.')
-                break
+                print(f'Weights for {name}/{suffix[iw]} are only zeros, ignoring.')
+                continue
             if fmt == 'longform':
                 data['x'].extend(w.tolist())
                 data['layer'].extend([name] * len(w))
@@ -364,8 +418,8 @@ def weights_keras(model, fmt='longform', plot='boxplot'):
             w = abs(w[w != 0])
             n = len(w)
             if n == 0:
-                print(f'Weights for {name} are only zeros, ignoring.')
-                break
+                print(f'Weights for {name}/{suffix[i]} are only zeros, ignoring.')
+                continue
             if fmt == 'longform':
                 data['x'].extend(w.tolist())
                 data['layer'].extend([name] * n)

@@ -1,5 +1,5 @@
 from hls4ml.converters.keras_v2_to_hls import get_weights_data, keras_handler, parse_default_keras_layer
-from hls4ml.model.quantizers import TernaryQuantizer
+from hls4ml.model.quantizers import QKerasQuantizer
 
 
 @keras_handler('GarNet', 'GarNetStack')
@@ -20,12 +20,29 @@ def parse_garnet_layer(keras_layer, input_names, input_shapes, data_reader):
     layer['n_vertices'] = input_shapes[0][1]
     layer['collapse'] = keras_layer['config']['collapse']
     layer['mean_by_nvert'] = keras_layer['config']['mean_by_nvert']
-    if keras_layer['config']['quantize_transforms']:
-        layer['quantizer'] = TernaryQuantizer()
 
     layer['n_aggregators'] = keras_layer['config']['n_aggregators']
     layer['n_out_features'] = keras_layer['config']['n_filters']  # number of output features
     layer['n_propagate'] = keras_layer['config']['n_propagate']  # number of latent features
+
+    quantizer_config = keras_layer['config'].get('quantizer', None)
+    if quantizer_config is not None and quantizer_config['class_name'] == 'quantized_bits':
+        layer['quantizer'] = QKerasQuantizer(quantizer_config)
+
+        # Since we merge input and output layers, we need higher precision
+        in_transform_quantizer_config = quantizer_config['config']
+
+        # For multiplication, we need twice as much bits. Since we also do accumulation,
+        # multiply by three to surely have enough.
+        # TODO: estimate precision using in/out matrix sices
+        in_transform_quantizer_config['bits'] = 16
+        in_transform_quantizer_config['integer'] = 8
+        layer['input_transform_quantizer'] = QKerasQuantizer(
+            {'class_name': 'quantized_bits', 'config': in_transform_quantizer_config}
+        )
+    else:
+        # Currently, only one 'quantized_bits' quantizer for the entire GarNet is supported
+        pass
 
     if layer['class_name'] == 'GarNet':
         layer['n_in_features'] = input_shapes[0][2]

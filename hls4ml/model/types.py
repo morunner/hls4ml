@@ -296,6 +296,8 @@ class ExponentPrecisionType(PrecisionType):
 
     def __init__(self, width=16, signed=True):
         super().__init__(width=width, signed=signed)
+        self.integer = 1
+        self.fractional = 1
 
     # TODO:  this should really be a specific type, not int
     def __str__(self):

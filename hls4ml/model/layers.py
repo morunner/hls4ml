@@ -1589,21 +1589,37 @@ class GarNet(Layer):
             ]
 
         else:
-            quantize = self.get_attr('quantizer') is not None
-            kernel, bias = self._make_input_transform_weights(n_propagate, n_aggregators, n_out_features, quantize=quantize)
+            quantizer = self.get_attr('quantizer', None)
+            in_transform_quantizer = self.get_attr('input_transform_quantizer', None)
 
-            self._add_variable(
-                'input_transform_weights', 'input_transform_w{index}', kernel, frac_width=10, quantize=quantize
+            kernel, bias = self._make_input_transform_weights(n_propagate, n_aggregators, n_out_features)
+            self.add_weights_variable(
+                name='input_transform_weights',
+                var_name='input_transform_w{index}',
+                data=kernel,
+                quantizer=in_transform_quantizer,
             )
-            self._add_variable('input_transform_biases', 'input_transform_b{index}', bias, frac_width=10, quantize=quantize)
-            # dummy
-            self.add_weights_variable(name='output_transform_weights', var_name='output_transform_w{index}', data=np.ones(1))
+            self.add_weights_variable(
+                name='input_transform_biases',
+                var_name='input_transform_b{index}',
+                data=bias,
+                quantizer=in_transform_quantizer,
+            )
 
             weights_source = [
                 ('aggregator_distance', 'S', 'kernel'),
                 ('aggregator_distance', 'S', 'bias'),
                 ('output_transform', 'Fout', 'bias'),
             ]
+
+            # dummy, because encoder and decoder are combined into one in self._make_input_transform_weights
+            # Since this layer consists of only a 1, we can safely assume one bit to be sufficient
+            self.add_weights_variable(
+                'output_transform_weights',
+                'output_transform_w{index}',
+                data=np.ones(1),
+                precision=IntegerPrecisionType(1, signed=False),
+            )
 
         for op_name, lname, wtype in weights_source:
             data = self.get_attr(f'{lname}_{wtype}_data')
@@ -1616,57 +1632,34 @@ class GarNet(Layer):
             name = f'{op_name}_{vtype}'
             var_name = f'{op_name}_{vtype[0]}{{index}}'
 
-            self._add_variable(name, var_name, data, frac_width=10, quantize=False)
+            self.add_weights_variable(name=name, var_name=var_name, data=data, quantizer=quantizer)
 
         self._output_features = self.attributes['n_out_features']
 
-    def _make_input_transform_weights(self, n_propagate, n_aggregators, n_out_features, quantize=False, sublayer=''):
+    def _make_input_transform_weights(self, n_propagate, n_aggregators, n_out_features, sublayer=''):
         # Due to linearity of the input transform, input weights and biases can be contracted away at conversion time
+        input_transform_kernel = self.get_attr(f'FLR{sublayer}_kernel_data')  # [n_in_features, n_propagate]
+        input_transform_bias = self.get_attr(f'FLR{sublayer}_bias_data')  # [n_propagate]
         output_transform_kernel = self.get_attr(
             f'Fout{sublayer}_kernel_data'
         )  # [(n_aggregators, n_propagate), n_out_features]
         output_transform_kernel = output_transform_kernel.reshape((n_aggregators, n_propagate, n_out_features))
-        if quantize:
-            output_transform_kernel = self.get_attr('quantizer')(output_transform_kernel)
 
-        input_transform_kernel = self.get_attr(f'FLR{sublayer}_kernel_data')  # [n_in_features, n_propagate]
-        if quantize:
-            input_transform_kernel = self.get_attr('quantizer')(input_transform_kernel)
-        data = np.dot(input_transform_kernel, output_transform_kernel)  # [n_in_features, n_aggregators, n_out_features]
-        kernel = data.transpose((2, 1, 0))
-
-        input_transform_bias = self.get_attr(f'FLR{sublayer}_bias_data')  # [n_propagate]
-        if quantize:
-            input_transform_bias = self.get_attr('quantizer')(input_transform_bias)
-        data = np.dot(input_transform_bias, output_transform_kernel)  # [n_aggregators, n_out_features]
-        bias = data.transpose((1, 0))
+        kernel = np.dot(input_transform_kernel, output_transform_kernel).transpose(
+            (2, 1, 0)
+        )  # [n_in_features, n_aggregators, n_out_features]
+        bias = np.dot(input_transform_bias, output_transform_kernel).transpose((1, 0))  # [n_aggregators, n_out_features]
 
         return kernel, bias
-
-    def _add_variable(self, name, var_name, data, frac_width=10, quantize=False):
-        # Wrapper for add_weights_variable with precision determination from data
-
-        # automatically make the variable unsigned if data are all positive
-        signed = np.amin(data) < 0.0
-
-        int_width = find_minimum_width(data, signed=signed)
-
-        if quantize:
-            precision = IntegerPrecisionType(width=int_width, signed=signed)
-        else:
-            width = int_width + frac_width
-            precision = FixedPrecisionType(
-                width=width, integer=int_width, signed=signed, rounding_mode='AP_RND', saturation_mode='AP_SAT'
-            )
-
-        self.add_weights_variable(name=name, var_name=var_name, data=data, precision=precision)
 
 
 class GarNetStack(GarNet):
     def _initialize_transforms(self):
         self._sublayer_weights = []
 
-        quantize = self.get_attr('quantizer') is not None
+        quantizer = self.get_attr('quantizer')
+        # TODO: Obtain `frac_width` from config
+        frac_width = 6
 
         for il in range(self.attributes['n_sublayers']):
             sublayer_weights = {}
@@ -1676,15 +1669,15 @@ class GarNetStack(GarNet):
             n_propagate = self.attributes['n_propagate'][il]
 
             kernel, bias = self._make_input_transform_weights(
-                n_propagate, n_aggregators, n_out_features, quantize=quantize, sublayer=il
+                n_propagate, n_aggregators, n_out_features, quantizer=quantizer, sublayer=il
             )
 
             name = f'input_transform_{il}_weights'
-            self._add_variable(name, f'input_transform_{il}_w{{index}}', kernel, frac_width=10, quantize=quantize)
+            self._add_variable(name, f'input_transform_{il}_w{{index}}', kernel, frac_width=frac_width, quantizer=quantizer)
             sublayer_weights['input_transform_weights'] = self.weights[name]
 
             name = f'input_transform_{il}_biases'
-            self._add_variable(name, f'input_transform_{il}_b{{index}}', bias, frac_width=10, quantize=quantize)
+            self._add_variable(name, f'input_transform_{il}_b{{index}}', bias, frac_width=frac_width, quantizer=quantizer)
             sublayer_weights['input_transform_biases'] = self.weights[name]
 
             weights_source = [
@@ -1704,7 +1697,7 @@ class GarNetStack(GarNet):
                 name = f'{op_name}_{il}_{vtype}'
                 var_name = f'{op_name}_{il}_{vtype[0]}{{index}}'
 
-                self._add_variable(name, var_name, data, frac_width=10, quantize=False)
+                self._add_variable(name, var_name, data, frac_width=frac_width)
                 sublayer_weights[f'{op_name}_{vtype}'] = self.weights[name]
 
             self._sublayer_weights.append(sublayer_weights)

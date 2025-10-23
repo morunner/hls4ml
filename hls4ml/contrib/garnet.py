@@ -3,7 +3,7 @@ Excerpt from https://github.com/jkiesele/caloGraphNN/blob/6d1127d807bc0dbaefcf1e
 """
 
 import tensorflow.keras as keras
-from qkeras import QActivation, QDense, ternary
+from qkeras import QActivation, QDense, quantized_bits, ternary
 
 K = keras.backend
 
@@ -62,31 +62,26 @@ class GarNet(keras.layers.Layer):
 
     def _setup_transforms(self, n_aggregators, n_filters, n_propagate):
         if self._quantize_transforms:
+            self._quantizer = quantized_bits(self._total_bits, self._int_bits, alpha=1)
             self._input_feature_transform = NamedQDense(
-                n_propagate,
-                kernel_quantizer="quantized_bits(%i,%i,0,alpha=1)" % (self._total_bits, self._int_bits),
-                bias_quantizer="quantized_bits(%i,%i,0,alpha=1)" % (self._total_bits, self._int_bits),
-                name='FLR',
+                n_propagate, kernel_quantizer=self._quantizer, bias_quantizer=self._quantizer, name='FLR'
             )
-            self._output_feature_transform = NamedQDense(
-                n_filters,
-                kernel_quantizer="quantized_bits(%i,%i,0,alpha=1)" % (self._total_bits, self._int_bits),
-                name='Fout',
-            )
+            self._output_feature_transform = NamedQDense(n_filters, kernel_quantizer=self._quantizer, name='Fout')
             if self._output_activation is None or self._output_activation == "linear":
-                self._output_activation_transform = QActivation(
-                    "quantized_bits(%i, %i)" % (self._total_bits, self._int_bits)
-                )
+                self._output_activation_transform = QActivation(self._quantizer)
             else:
                 self._output_activation_transform = QActivation(
                     "quantized_%s(%i, %i)" % (self._output_activation, self._total_bits, self._int_bits)
                 )
+            self._aggregator_distance = NamedQDense(
+                n_aggregators, kernel_quantizer=self._quantizer, bias_quantizer=self._quantizer, name='S'
+            )
         else:
+            self._quantizer = None
             self._input_feature_transform = NamedDense(n_propagate, name='FLR')
             self._output_feature_transform = NamedDense(n_filters, activation=self._output_activation, name='Fout')
             self._output_activation_transform = keras.layers.Activation(self._output_activation)
-
-        self._aggregator_distance = NamedDense(n_aggregators, name='S')
+            self._aggregator_distance = NamedDense(n_aggregators, name='S')
 
         self._sublayers = [
             self._input_feature_transform,
@@ -253,7 +248,7 @@ class GarNet(keras.layers.Layer):
                 'collapse': self._collapse,
                 'input_format': self._input_format,
                 'output_activation': self._output_activation,
-                'quantize_transforms': self._quantize_transforms,
+                'quantizer': self._quantizer,
                 'mean_by_nvert': self._mean_by_nvert,
             }
         )
