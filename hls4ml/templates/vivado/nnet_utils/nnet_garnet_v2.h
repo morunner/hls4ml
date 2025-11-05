@@ -14,15 +14,19 @@ struct garnetlayer_config {
 
 inline float garnet_exp_fcn_float(float input) { return std::exp(input); }
 
-template <class data_T, typename CONFIG_T> inline unsigned garnet_idx_from_real_val(data_T x) {
+template <class data_T, class exp_table_index_T, typename CONFIG_T> exp_table_index_T garnet_idx_from_real_val(data_T x) {
     if (x < 0)
         x = -x;
 
-    // FIXME: infer data type conversion from training
-    unsigned idx = (unsigned)((ap_fixed<32, 16>)x << CONFIG_T::exp_table_indexing_shmt);
-    idx = (idx > CONFIG_T::exp_table_size - 1) ? CONFIG_T::exp_table_size - 1 : idx;
-    idx = (idx < 0) ? 0 : idx;
-    return idx;
+    // if x contains any bits above table size, it is represented by the maximum possible value in the table
+    // +2 because we assume x to be signed - one additional bit for sign bit
+    if (x.range(x.width - 1, CONFIG_T::exp_table_size_nbits + 2) != 0) {
+        exp_table_index_T max_idx = CONFIG_T::exp_table_size - 1;
+        return max_idx;
+    }
+
+    // Slice the bits relevant for our index
+    return (exp_table_index_T)((ap_fixed<32, 16>)x << CONFIG_T::exp_table_indexing_shmt);
 }
 
 template <class exp_table_T, typename CONFIG_T> void garnet_init_exp_table(exp_table_T table_out[CONFIG_T::exp_table_size]) {
@@ -41,13 +45,16 @@ template <class exp_table_T, typename CONFIG_T> void garnet_init_exp_table(exp_t
 template <class data_T, class exp_table_T, typename CONFIG_T>
 void garnet_init_weights(data_T distances[CONFIG_T::V * CONFIG_T::S], exp_table_T exp_table[CONFIG_T::exp_table_size],
                          exp_table_T weights[CONFIG_T::V * CONFIG_T::S]) {
+    typedef ap_uint<CONFIG_T::exp_table_size_nbits> exp_table_index_t;
+
 InitWeightsOuter:
     for (int s = 0; s < CONFIG_T::S; s++) {
 #pragma HLS UNROLL
     InitWeightsInner:
         for (int v = 0; v < CONFIG_T::V; v++) {
 #pragma HLS UNROLL
-            unsigned idx = garnet_idx_from_real_val<data_T, CONFIG_T>(distances[v * CONFIG_T::S + s]);
+            exp_table_index_t idx =
+                garnet_idx_from_real_val<data_T, exp_table_index_t, CONFIG_T>(distances[v * CONFIG_T::S + s]);
             weights[s * CONFIG_T::V + v] = exp_table[idx];
         }
     }
