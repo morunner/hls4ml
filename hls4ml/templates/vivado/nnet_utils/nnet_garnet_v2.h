@@ -4,8 +4,6 @@
 #include "hls_math.h"
 #include "nnet_common.h"
 
-#define LOG2V 7
-
 namespace nnet {
 
 struct garnetlayer_config {
@@ -21,7 +19,7 @@ template <class data_T, typename CONFIG_T> inline unsigned garnet_idx_from_real_
         x = -x;
 
     // FIXME: infer data type conversion from training
-    unsigned idx = (unsigned)((ap_fixed<32, 16>)x << CONFIG_T::exp_table_shmt);
+    unsigned idx = (unsigned)((ap_fixed<32, 16>)x << CONFIG_T::exp_table_indexing_shmt);
     idx = (idx > CONFIG_T::exp_table_size - 1) ? CONFIG_T::exp_table_size - 1 : idx;
     idx = (idx < 0) ? 0 : idx;
     return idx;
@@ -36,7 +34,7 @@ void garnet_init_exp_table(typename CONFIG_T::exp_table_t table_out[CONFIG_T::ex
 
     for (unsigned i = 0; i < CONFIG_T::exp_table_size - 2; i++) {
         // FIXME: infer data type conversion from training
-        float val = (float)((ap_fixed<32, 16>)(i + 1) >> CONFIG_T::exp_table_shmt);
+        float val = (float)((ap_fixed<32, 16>)(i + 1) >> CONFIG_T::exp_table_indexing_shmt);
         typename CONFIG_T::exp_table_t exp_x = garnet_exp_fcn_float(-val * val);
         table_out[i] = exp_x;
     }
@@ -62,7 +60,7 @@ InitWeightsOuter:
 }
 
 template <class res_T, typename CONFIG_T> res_T garnetlayer_acc_tree(res_T data[CONFIG_T::V]) {
-    int D_tree = LOG2V + 1; // Include root node
+    int D_tree = CONFIG_T::V_nbits + 1; // Include root node
     int W_tree = CONFIG_T::V;
     int w_current = W_tree;
 

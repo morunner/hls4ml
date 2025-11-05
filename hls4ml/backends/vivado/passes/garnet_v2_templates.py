@@ -9,7 +9,8 @@ static const unsigned V_nbits = {V_nbits};
 static const unsigned S = {S};
 static const unsigned N = {N};
 static const unsigned exp_table_size = {exp_table_size};
-static const unsigned exp_table_shmt = {exp_table_shmt};
+static const unsigned exp_table_size_nbits = {exp_table_size_nbits};
+static const unsigned exp_table_indexing_shmt = {exp_table_indexing_shmt};
 typedef {exp_table_t} exp_table_t;
 }};\n"""
 
@@ -57,7 +58,8 @@ class GarNetLayerConfigTemplate(LayerConfigTemplate):
 
         exp_table_size = scale_factor * resolution
         params['exp_table_size'] = exp_table_size
-        params['exp_table_shmt'] = int(np.log2(resolution))
+        params['exp_table_size_nbits'] = int(np.log2(exp_table_size))
+        params['exp_table_indexing_shmt'] = int(np.log2(resolution))
 
         # Two integer bits should be enough, since max(exp(-dist * dist)) = 1
         # Additionally keep one sign bit
