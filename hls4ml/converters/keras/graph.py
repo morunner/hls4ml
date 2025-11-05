@@ -11,9 +11,6 @@ def parse_garnet_layer_v2(keras_layer, input_names, input_shapes, data_reader):
     layer['S'] = keras_layer['config']['S']  # Number of aggregators per vertex (hit)
     layer['N'] = keras_layer['config']['N']  # Number of encoded features per vertex
     layer['max_dist_input'] = keras_layer['config']['max_dist_input']  # Maximum distance input received during training
-    layer['exp_table_resolution'] = (
-        keras_layer['config']['exp_table_resolution'] if 'exp_table_resolution' in keras_layer['config'] else None
-    )
 
     output_shape = [input_shapes[0][1]]
     return layer, output_shape

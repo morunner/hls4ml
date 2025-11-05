@@ -25,8 +25,8 @@ template <class data_T, typename CONFIG_T> inline unsigned garnet_idx_from_real_
     return idx;
 }
 
-template <class data_T, typename CONFIG_T>
-void garnet_init_exp_table(typename CONFIG_T::exp_table_t table_out[CONFIG_T::exp_table_size]) {
+template <class data_T, class exp_table_T, typename CONFIG_T>
+void garnet_init_exp_table(exp_table_T table_out[CONFIG_T::exp_table_size]) {
     // Set exp for small distances to one to give room for optimizations
     table_out[0] = 1;
     // Set exp for large distances to zero to give room for optimizations
@@ -35,17 +35,16 @@ void garnet_init_exp_table(typename CONFIG_T::exp_table_t table_out[CONFIG_T::ex
     for (unsigned i = 0; i < CONFIG_T::exp_table_size - 2; i++) {
         // FIXME: infer data type conversion from training
         float val = (float)((ap_fixed<32, 16>)(i + 1) >> CONFIG_T::exp_table_indexing_shmt);
-        typename CONFIG_T::exp_table_t exp_x = garnet_exp_fcn_float(-val * val);
+        exp_table_T exp_x = garnet_exp_fcn_float(-val * val);
         table_out[i] = exp_x;
     }
 }
 
-template <class data_T, typename CONFIG_T>
-void garnet_init(data_T distances[CONFIG_T::V * CONFIG_T::S],
-                 typename CONFIG_T::exp_table_t weights[CONFIG_T::V * CONFIG_T::S]) {
-    typename CONFIG_T::exp_table_t exp_table[CONFIG_T::exp_table_size];
+template <class data_T, class exp_table_T, typename CONFIG_T>
+void garnet_init(data_T distances[CONFIG_T::V * CONFIG_T::S], exp_table_T weights[CONFIG_T::V * CONFIG_T::S]) {
+    exp_table_T exp_table[CONFIG_T::exp_table_size];
 #pragma HLS ARRAY_PARTITION variable = exp_table complete
-    garnet_init_exp_table<data_T, CONFIG_T>(exp_table);
+    garnet_init_exp_table<data_T, exp_table_T, CONFIG_T>(exp_table);
 
 InitWeightsOuter:
     for (int s = 0; s < CONFIG_T::S; s++) {
@@ -69,8 +68,10 @@ template <class res_T, typename CONFIG_T> res_T garnetlayer_acc_tree(res_T data[
 #pragma HLS ARRAY_PARTITION variable = mac_buf off = true
 #pragma HLS ARRAY_PARTITION variable = mac_buf_next off = true
 
+AccTreeDepth:
     for (int d = 0; d < D_tree; d++) {
 #pragma HLS PIPELINE II = 1
+    AccTreeWidth:
         for (int w = 0; w < W_tree; w++) {
 #pragma HLS UNROLL
             if (d == 0) { // Leaf nodes
@@ -91,17 +92,17 @@ template <class res_T, typename CONFIG_T> res_T garnetlayer_acc_tree(res_T data[
     return mac_buf_next[0];
 }
 
-template <class input1_T, class input2_T, class res_T, typename CONFIG_T>
+template <class input1_T, class input2_T, class res_T, class exp_table_T, typename CONFIG_T>
 void garnetlayer(input1_T input1[CONFIG_T::V * CONFIG_T::N], input2_T input2[CONFIG_T::V * CONFIG_T::S],
                  res_T res[CONFIG_T::S * CONFIG_T::N]) {
 #pragma HLS ARRAY_PARTITION variable = input1 complete
 #pragma HLS ARRAY_PARTITION variable = input2 complete
 #pragma HLS ARRAY_PARTITION variable = res complete
 
-    typename CONFIG_T::exp_table_t weights[CONFIG_T::V * CONFIG_T::S];
+    exp_table_T weights[CONFIG_T::V * CONFIG_T::S];
 #pragma HLS ARRAY_PARTITION variable = weights complete
 
-    garnet_init<input2_T, CONFIG_T>(input2, weights);
+    garnet_init<input2_T, exp_table_T, CONFIG_T>(input2, weights);
 
 Aggregators:
     for (int s = 0; s < CONFIG_T::S; s++) {
@@ -117,6 +118,7 @@ Aggregators:
 #pragma HLS ARRAY_PARTITION variable = feature_buf complete
 #pragma HLS ARRAY_PARTITION variable = weight_buf complete
 
+        InitializeBuffers:
             for (int v = 0; v < CONFIG_T::V; v++) {
 #pragma HLS UNROLL
                 feature_buf[v] = (res_T)(input1[v * CONFIG_T::N + n] * weights[s * CONFIG_T::V + v] >> CONFIG_T::V_nbits);

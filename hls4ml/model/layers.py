@@ -1556,7 +1556,40 @@ class Bidirectional(Layer):
 
 
 class GarNetLayer(Layer):
+    _expected_attributes = [
+        Attribute('V'),
+        Attribute('S'),
+        Attribute('N'),
+        Attribute('max_dist_input', value_type=float),
+        Attribute('exponential_table',value_type=dict,default={'ScaleFactor': None, 'Resolution': 64},configurable=True),
+        TypeAttribute('exp_table'),
+    ]
+
     def initialize(self):
+        # Set default attributes. These can still be tuned by the user
+        if self.get_attr('exp_table_t', None) is None:
+            # Two integer bits should be enough, since max(exp(-dist * dist)) = 1
+            # Additionally keep one sign bit
+            self.set_attr('exp_table_t', FixedPrecisionType(width=16, integer=2, signed=True))
+
+        exp_table_params = self.get_attr('exponential_table', None)
+        assert exp_table_params is not None
+        if exp_table_params['ScaleFactor'] is None:
+            # infer scale factor from max distance input
+            default_scale_factor = 2 ** int(np.ceil(np.log2(self.get_attr('max_dist_input'))))
+
+            # Keep scale factor at a sane level: exp(-4 * 4) is already very small (1.125e-7)
+            # Otherwise, the exp table size might explode
+            default_scale_factor = 4 if default_scale_factor > 4 else default_scale_factor
+            exp_table_params['ScaleFactor'] = default_scale_factor
+
+            self.set_attr('exponential_table', exp_table_params)
+
+        if not np.log2(exp_table_params['Resolution']).is_integer():
+            raise ValueError("Exponential table resolution must be a power of two")
+        if not np.log2(exp_table_params['ScaleFactor']).is_integer():
+            raise ValueError("Scale factor must be a power of two")
+
         shape = [self.attributes['V']]
         self.add_output_variable(shape)
 
