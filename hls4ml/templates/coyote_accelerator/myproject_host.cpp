@@ -9,10 +9,10 @@
  */
 
 #include <chrono>
-#include <string>
-#include <vector>
 #include <fstream>
 #include <iostream>
+#include <string>
+#include <vector>
 
 #include "defines.h"
 #include "host_libs.hpp"
@@ -26,11 +26,13 @@ int main(int argc, char **argv) {
     unsigned int batch_size;
 
     boost::program_options::options_description runtime_options("Coyote hls4ml run-time options");
-    runtime_options.add_options()
-        ("batch_size,b", boost::program_options::value<unsigned int>(&batch_size)->default_value(1), "Inference batch size")
-        ("data_path,p", boost::program_options::value<std::string>(&data_path)->default_value(default_path), "Path to tb_data folder with input/output features for validation");
+    runtime_options.add_options()("batch_size,b", boost::program_options::value<unsigned int>(&batch_size)->default_value(1),
+                                  "Inference batch size")(
+        "data_path,p", boost::program_options::value<std::string>(&data_path)->default_value(default_path),
+        "Path to tb_data folder with input/output features for validation");
     boost::program_options::variables_map command_line_arguments;
-    boost::program_options::store(boost::program_options::parse_command_line(argc, argv, runtime_options), command_line_arguments);
+    boost::program_options::store(boost::program_options::parse_command_line(argc, argv, runtime_options),
+                                  command_line_arguments);
     boost::program_options::notify(command_line_arguments);
 
     // hls-fpga-machine-learning insert I/O size
@@ -41,7 +43,7 @@ int main(int argc, char **argv) {
     std::string pline;
     std::ifstream fin(data_path + "/tb_input_features.dat");
     std::ifstream fpr(data_path + "/csim_results.log");
-    
+
     if (fin.is_open() && fpr.is_open()) {
         int cnt = 0;
         int total_batches = 0;
@@ -66,7 +68,7 @@ int main(int argc, char **argv) {
                 pr.push_back(atof(current));
                 current = strtok(NULL, " ");
             }
-            
+
             // Set model data for the i-th point in the batch
             model.set_data(&in[0], cnt);
             labels.push_back(pr);
@@ -79,35 +81,34 @@ int main(int argc, char **argv) {
                 auto begin_time = std::chrono::high_resolution_clock::now();
                 model.predict();
                 auto end_time = std::chrono::high_resolution_clock::now();
-                double time = std::chrono::duration_cast<std::chrono::nanoseconds>(end_time - begin_time).count();                
+                double time = std::chrono::duration_cast<std::chrono::nanoseconds>(end_time - begin_time).count();
                 avg_latency += (time / 1e3);
                 avg_throughput += (batch_size / (time * 1e-9));
-                
+
                 // Functional correctness
-                for (int i = 0; i < batch_size; i++) { 
+                for (int i = 0; i < batch_size; i++) {
                     float *pred = model.get_predictions(i);
                     for (int j = 0; j < out_size; j++) {
-                        assert(int(10000.0 * labels[i][j]) == int(10000.0 * pred[j])); 
-                    } 
+                        assert(int(10000.0 * labels[i][j]) == int(10000.0 * pred[j]));
+                    }
                 }
-                
+
                 // Reset for next batch
                 total_batches++;
                 labels.clear();
                 cnt = 0;
             }
-
         }
 
         std::cout << "Batches processed: " << total_batches << std::endl;
-        std::cout << "Average latency: " << avg_latency / (double) total_batches << " us" << std::endl;
-        std::cout << "Average throughput: " << avg_throughput / (double) total_batches << " inferences/s" << std::endl;
+        std::cout << "Average latency: " << avg_latency / (double)total_batches << " us" << std::endl;
+        std::cout << "Average throughput: " << avg_throughput / (double)total_batches << " inferences/s" << std::endl;
 
         fin.close();
         fpr.close();
     } else {
         std::cout << "Couldn't open input/output file; make sure data_path is set correctly!" << std::endl;
     }
-    
+
     return EXIT_SUCCESS;
 }
