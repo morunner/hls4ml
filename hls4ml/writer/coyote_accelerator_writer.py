@@ -3,7 +3,7 @@ import stat
 import glob
 import numpy as np
 from pathlib import Path
-from shutil import copyfile, copytree, move
+from shutil import copyfile, copytree, move, rmtree
 
 from hls4ml.writer.vitis_writer import VitisWriter
 
@@ -22,6 +22,8 @@ class CoyoteAcceleratorWriter(VitisWriter):
         filedir = os.path.dirname(os.path.abspath(__file__))
         srcpath = os.path.join(filedir, '../contrib/Coyote/')
         dstpath = f'{model.config.get_output_dir()}/Coyote'
+        if os.path.isdir(dstpath):
+            rmtree(dstpath)
         copytree(srcpath, dstpath)
 
     def restructure_dir(self, model):
@@ -39,6 +41,8 @@ class CoyoteAcceleratorWriter(VitisWriter):
 
         srcpath = f'{model.config.get_output_dir()}/firmware'
         dstpath = f'{model.config.get_output_dir()}/src/hls/model_wrapper/firmware'
+        if os.path.isdir(dstpath):
+            rmtree(dstpath)
         move(srcpath, dstpath)
 
     def write_project_cpp(self, model):
@@ -231,9 +235,13 @@ class CoyoteAcceleratorWriter(VitisWriter):
         # CMakeLists.txt
         cmake_src = os.path.join(filedir, '../templates/coyote_accelerator/CMakeLists.txt')
         cmake_dst = f'{model.config.get_output_dir()}/CMakeLists.txt'
+        model_inputs = list(model.get_input_variables())
+        model_outputs = list(model.get_output_variables())
+        n_strm_axi = max(len(model_inputs), len(model_outputs))
         with open(cmake_src) as src, open(cmake_dst, 'w') as dst:
             for line in src.readlines():
                 line = line.replace('myproject', model.config.get_project_name())
+                line = line.replace('N_STRM_AXI 1', f'N_STRM_AXI {n_strm_axi}')
                 dst.write(line)
 
     def write_model_wrapper(self, model):
@@ -252,27 +260,65 @@ class CoyoteAcceleratorWriter(VitisWriter):
         """
         filedir = Path(__file__).parent
 
+        model_inputs = model.get_input_variables()
+        model_outputs = model.get_output_variables()
+        # if len(model_inputs) > 1 or len(model_outputs) > 1:
+        #     raise RuntimeError('CoyoteAccelerator backend currently only supports one input and one output')
+
         if not os.path.isdir(f'{model.config.get_output_dir()}/src/hls/model_wrapper'):
             os.makedirs(f'{model.config.get_output_dir()}/src/hls/model_wrapper')
 
-        # model_wrapper.h
-        srcpath = (filedir / '../templates/coyote_accelerator/model_wrapper.hpp').resolve()
-        dstpath = f'{model.config.get_output_dir()}/src/hls/model_wrapper/model_wrapper.hpp'
-        copyfile(srcpath, dstpath)
-
-        # model_wrapper.cpp
-        f = open(os.path.join(filedir, '../templates/coyote_accelerator/model_wrapper.cpp'))
-        fout = open(f'{model.config.get_output_dir()}/src/hls/model_wrapper/model_wrapper.cpp', 'w')
-
-        model_inputs = model.get_input_variables()
-        model_outputs = model.get_output_variables()
-        if len(model_inputs) > 1 or len(model_outputs) > 1:
-            raise RuntimeError('CoyoteAccelerator backend currently only supports one input and one output')
+        # model_wrapper.hpp
+        f = open(os.path.join(filedir, '../templates/coyote_accelerator/model_wrapper.hpp'))
+        fout = open(f'{model.config.get_output_dir()}/src/hls/model_wrapper/model_wrapper.hpp', 'w')
 
         for line in f.readlines():
             indent = ' ' * (len(line) - len(line.lstrip(' ')))
             if 'myproject' in line:
                 newline = line.replace('myproject', model.config.get_project_name())
+            elif '// hls-fpga-machine-learning insert axi streams' in line:
+                newline = ',\n'.join([(f'{indent}hls::stream<axi_s> &data_in{i}') for i in range(len(model_inputs))])
+                newline += ',\n'
+                newline += ',\n'.join([(f'{indent}hls::stream<axi_s> &data_out{i}') for i in range(len(model_outputs))])
+                newline += '\n'
+            else:
+                newline = line
+
+            fout.write(newline)
+
+        f.close()
+        fout.close()
+
+        # model_wrapper.cpp
+        f = open(os.path.join(filedir, '../templates/coyote_accelerator/model_wrapper.cpp'))
+        fout = open(f'{model.config.get_output_dir()}/src/hls/model_wrapper/model_wrapper.cpp', 'w')
+
+        for line in f.readlines():
+            indent = ' ' * (len(line) - len(line.lstrip(' ')))
+            if 'myproject' in line:
+                newline = line.replace('myproject', model.config.get_project_name())
+
+            elif '// hls-fpga-machine-learning insert axi streams' in line:
+                newline = ',\n'.join([(f'{indent}hls::stream<axi_s> &data_in{i}') for i in range(len(model_inputs))])
+                newline += ',\n'
+                newline += ',\n'.join([(f'{indent}hls::stream<axi_s> &data_out{i}') for i in range(len(model_outputs))])
+                newline += '\n'
+
+            elif '// hls-fpga-machine-learning insert interface pragmas' in line:
+                newline = '\n'.join(
+                    [
+                        f"#pragma HLS INTERFACE axis register port = data_in{i} name = data_in{i}"
+                        for i in range(len(model_inputs))
+                    ]
+                )
+                newline += '\n'
+                newline += '\n'.join(
+                    [
+                        f'#pragma HLS INTERFACE axis register port = data_out{i} name = data_out{i}'
+                        for i in range(len(model_outputs))
+                    ]
+                )
+                newline += '\n'
 
             elif '// hls-fpga-machine-learning insert data' in line:
                 newline = ''
@@ -289,10 +335,10 @@ class CoyoteAcceleratorWriter(VitisWriter):
             elif '// hls-fpga-machine-learning insert top-level function' in line:
                 newline = ''
 
-                for inp in model_inputs:
+                for i, inp in enumerate(model_inputs):
                     newline += (
                         indent
-                        + f'nnet::axi_stream_to_data<{inp.type.name}, float, {inp.size_cpp()}, COYOTE_AXI_STREAM_BITS, 8 * sizeof(float)>(data_in, {inp.name});\n'
+                        + f'nnet::axi_stream_to_data<{inp.type.name}, float, {inp.size_cpp()}, COYOTE_AXI_STREAM_BITS, 8 * sizeof(float)>(data_in{i}, {inp.name});\n'
                     )
 
                 input_vars = ','.join([i.name for i in model_inputs])
@@ -301,10 +347,10 @@ class CoyoteAcceleratorWriter(VitisWriter):
                 top_level = indent + f'{model.config.get_project_name()}({all_vars});\n'
                 newline += top_level
 
-                for out in model_outputs:
+                for i, out in enumerate(model_outputs):
                     newline += (
                         indent
-                        + f'nnet::data_to_axi_stream<{out.type.name}, float, {out.size_cpp()}, COYOTE_AXI_STREAM_BITS, 8 * sizeof(float)>({out.name}, data_out);\n'
+                        + f'nnet::data_to_axi_stream<{out.type.name}, float, {out.size_cpp()}, COYOTE_AXI_STREAM_BITS, 8 * sizeof(float)>({out.name}, data_out{i});\n'
                     )
 
             else:
@@ -316,15 +362,57 @@ class CoyoteAcceleratorWriter(VitisWriter):
         fout.close()
 
         # vfpga_top.svh
-        srcpath = (filedir / '../templates/coyote_accelerator/vfpga_top.svh').resolve()
-        dstpath = f'{model.config.get_output_dir()}/src/vfpga_top.svh'
-        copyfile(srcpath, dstpath)
+        filedir = os.path.dirname(os.path.abspath(__file__))
+        f = open(os.path.join(filedir, '../templates/coyote_accelerator/vfpga_top.svh'))
+        fout = open(f'{model.config.get_output_dir()}/src/vfpga_top.svh', 'w')
+
+        for line in f.readlines():
+            indent = ' ' * (len(line) - len(line.lstrip(' ')))
+            if '// hls-fpga-machine-learning insert axi connections' in line:
+                newline = ''
+                for i, inp in enumerate(model_inputs):
+                    newline += indent + f'.data_in{i}_TDATA        (axis_host_recv[{i}].tdata),\n'
+                    newline += indent + f'.data_in{i}_TKEEP        (axis_host_recv[{i}].tkeep),\n'
+                    newline += indent + f'.data_in{i}_TLAST        (axis_host_recv[{i}].tlast),\n'
+                    newline += indent + f'.data_in{i}_TSTRB        (0),\n'
+                    newline += indent + f'.data_in{i}_TVALID       (axis_host_recv[{i}].tvalid),\n'
+                    newline += indent + f'.data_in{i}_TREADY       (axis_host_recv[{i}].tready),\n'
+                    newline += '\n'
+
+                for i, out in enumerate(model_outputs):
+                    newline += indent + f'.data_out{i}_TDATA       (axis_host_send[{i}].tdata),\n'
+                    newline += indent + f'.data_out{i}_TKEEP       (axis_host_send[{i}].tkeep),\n'
+                    newline += indent + f'.data_out{i}_TLAST       (axis_host_send[{i}].tlast),\n'
+                    newline += indent + f'.data_out{i}_TSTRB       (),\n'
+                    newline += indent + f'.data_out{i}_TVALID      (axis_host_send[{i}].tvalid),\n'
+                    newline += indent + f'.data_out{i}_TREADY      (axis_host_send[{i}].tready),\n'
+                    newline += '\n'
+            elif '// hls-fpga-machine-learning tie off host streams' in line:
+                newline = ''
+                stream_diff = len(model_inputs) - len(model_outputs)
+                if stream_diff > 0:
+                    streams_to_tie_off = [
+                        f'always_comb axis_host_send[{i}].tie_off_m();' for i in range(len(model_outputs), len(model_inputs))
+                    ]
+                else:
+                    # More output streams than input streams
+                    streams_to_tie_off = [
+                        f'always_comb axis_host_recv[{i}].tie_off_m();\n'
+                        for i in range(len(model_inputs), len(model_outputs))
+                    ]
+                for stream in streams_to_tie_off:
+                    newline += indent + stream
+            else:
+                newline = line
+
+            fout.write(newline)
+
+        f.close()
+        fout.close()
 
         # init_ip.tcl for any additional IPs that may be needed for the model (e.g., ILA for debugging) --- UNUSED FOR NOW
         # srcpath = (filedir / '../templates/coyote_accelerator/init_ip.tcl').resolve()
         # dstpath = f'{model.config.get_output_dir()}/src/init_ip.tcl'
-
-        copyfile(srcpath, dstpath)
 
     def write_host_code(self, model):
         """
@@ -347,18 +435,22 @@ class CoyoteAcceleratorWriter(VitisWriter):
 
         model_inputs = model.get_input_variables()
         model_outputs = model.get_output_variables()
-        if len(model_inputs) > 1 or len(model_outputs) > 1:
-            raise RuntimeError('CoyoteAccelerator backend currently only supports one input and one output')
+        if len(model_inputs) > 1:
+            raise RuntimeError('CoyoteAccelerator backend currently only supports one input')
 
         for line in f.readlines():
             indent = ' ' * (len(line) - len(line.lstrip(' ')))
 
             if '// hls-fpga-machine-learning insert I/O size' in line:
                 newline = ''
-                for inp in model_inputs:
-                    newline += indent + f'constexpr const unsigned int in_size = {inp.size_cpp()};\n'
-                for out in model_outputs:
-                    newline += indent + f'constexpr const unsigned int out_size = {out.size_cpp()};\n'
+                newline += (
+                    indent + f"unsigned int in_size = " f"{{ {' ,'.join([inp.size_cpp() for inp in model_inputs])} }};\n"
+                )
+                newline += (
+                    indent + f"unsigned int out_sizes[] = "
+                    f"{{ {' ,'.join([out.size_cpp() for out in model_outputs])} }};\n"
+                )
+                newline += indent + f"unsigned int n_out = {len(model_outputs)};"
 
             else:
                 newline = line
@@ -394,7 +486,7 @@ class CoyoteAcceleratorWriter(VitisWriter):
         else:
             raise Exception("Unsupported input/output data files.")
 
-        # Faltten data, just keep first dimension
+        # Flatten data, just keep first dimension
         data = data.reshape(data.shape[0], -1)
 
         def print_data(f):
@@ -423,13 +515,13 @@ class CoyoteAcceleratorWriter(VitisWriter):
         input_data = model.config.get_config_value('InputData')
         output_predictions = model.config.get_config_value('OutputPredictions')
 
-        if input_data:
+        if input_data is not None:
             if input_data[-3:] == 'dat':
                 copyfile(input_data, f'{model.config.get_output_dir()}/tb_data/tb_input_features.dat')
             else:
                 self.__make_dat_file(input_data, f'{model.config.get_output_dir()}/tb_data/tb_input_features.dat')
 
-        if output_predictions:
+        if output_predictions is not None:
             if output_predictions[-3:] == 'dat':
                 copyfile(output_predictions, f'{model.config.get_output_dir()}/tb_data/tb_output_predictions.dat')
             else:
@@ -442,8 +534,8 @@ class CoyoteAcceleratorWriter(VitisWriter):
 
         model_inputs = model.get_input_variables()
         model_outputs = model.get_output_variables()
-        if len(model_inputs) > 1 or len(model_outputs) > 1:
-            raise RuntimeError('CoyoteAccelerator backend currently only supports one input and one output')
+        # if len(model_inputs) > 1 or len(model_outputs) > 1:
+        #     raise RuntimeError('CoyoteAccelerator backend currently only supports one input and one output')
 
         for line in f.readlines():
             indent = ' ' * (len(line) - len(line.lstrip(' ')))
@@ -454,47 +546,54 @@ class CoyoteAcceleratorWriter(VitisWriter):
             elif '// hls-fpga-machine-learning insert data' in line:
                 newline = line
                 offset = 0
-                for inp in model_inputs:
+                for i, inp in enumerate(model_inputs):
                     newline += indent + f'float {inp.name}[{inp.size_cpp()}];\n'
                     newline += indent + f'nnet::copy_data<float, float, {offset}, {inp.size_cpp()}>(in, {inp.name});\n'
-                    newline += indent + 'hls::stream<axi_s> data_in;\n'
+                    newline += indent + f'hls::stream<axi_s> data_in{i};\n'
                     newline += (
                         indent
-                        + f'nnet::data_to_axi_stream<float, float, {inp.size_cpp()}, COYOTE_AXI_STREAM_BITS, 8 * sizeof(float)>({inp.name}, data_in);\n'
+                        + f'nnet::data_to_axi_stream<float, float, {inp.size_cpp()}, COYOTE_AXI_STREAM_BITS, 8 * sizeof(float)>({inp.name}, data_in{i});\n'
                     )
                     offset += inp.size()
-                for out in model_outputs:
+                for i, out in enumerate(model_outputs):
                     newline += indent + f'float {out.name}[{out.size_cpp()}];\n'
-                    newline += indent + 'hls::stream<axi_s> data_out;\n'
+                    newline += indent + f'hls::stream<axi_s> data_out{i};\n'
 
             elif '// hls-fpga-machine-learning insert zero' in line:
                 newline = line
-                for inp in model_inputs:
+                for i, inp in enumerate(model_inputs):
                     newline += indent + f'float {inp.name}[{inp.size_cpp()}];\n'
                     newline += indent + f'nnet::fill_zero<float, {inp.size_cpp()}>({inp.name});\n'
-                    newline += indent + 'hls::stream<axi_s> data_in;\n'
+                    newline += indent + f'hls::stream<axi_s> data_in{i};\n'
                     newline += (
                         indent
-                        + f'nnet::data_to_axi_stream<float, float, {inp.size_cpp()}, COYOTE_AXI_STREAM_BITS, 8 * sizeof(float)>({inp.name}, data_in);\n'
+                        + f'nnet::data_to_axi_stream<float, float, {inp.size_cpp()}, COYOTE_AXI_STREAM_BITS, 8 * sizeof(float)>({inp.name}, data_in{i});\n'
                     )
 
-                for out in model_outputs:
+                for i, out in enumerate(model_outputs):
                     newline += indent + f'float {out.name}[{out.size_cpp()}];\n'
-                    newline += indent + 'hls::stream<axi_s> data_out;\n'
+                    newline += indent + f'hls::stream<axi_s> data_out{i};\n'
 
             elif '// hls-fpga-machine-learning insert top-level-function' in line:
+                data_in = ', '.join(f'data_in{i}' for i in range(len(model_inputs)))
+                data_out = ', '.join(f'data_out{i}' for i in range(len(model_outputs)))
+                model_wrapper_args = f'{data_in}, {data_out}'
+
                 newline = line
-                newline += indent + 'model_wrapper(data_in, data_out);\n'
-                newline += (
-                    indent
-                    + f'nnet::axi_stream_to_data<float, float, {out.size_cpp()}, COYOTE_AXI_STREAM_BITS, 8 * sizeof(float)>(data_out, {out.name});\n'
-                )
+                newline += indent + f'model_wrapper({model_wrapper_args});\n'
+                for i, out in enumerate(model_outputs):
+                    newline += (
+                        indent
+                        + f'nnet::axi_stream_to_data<float, float, {out.size_cpp()}, COYOTE_AXI_STREAM_BITS, 8 * sizeof(float)>(data_out{i}, {out.name});\n'
+                    )
 
             elif '// hls-fpga-machine-learning insert predictions' in line:
                 newline = line
-                for out in model_outputs:
-                    newline += indent + f'for(int i = 0; i < {out.size_cpp()}; i++) {{\n'
-                    newline += indent + '  std::cout << pr[i] << " ";\n'
+                for i in range(len(model_outputs)):
+                    begin = sum([int(outp.size_cpp()) for outp in model_outputs[:i]])
+                    end = sum([int(outp.size_cpp()) for outp in model_outputs[: i + 1]])
+                    newline += indent + f'for (unsigned int i = {str(begin)}; i < {str(end)}; i++) {{\n'
+                    newline += indent + '   std::cout << pr[i] << " ";\n'
                     newline += indent + '}\n'
                     newline += indent + 'std::cout << std::endl;\n'
 

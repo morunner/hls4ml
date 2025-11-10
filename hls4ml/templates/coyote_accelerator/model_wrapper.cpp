@@ -17,10 +17,11 @@
  * possibly be 1 bit in a "convential" OS, so some padding would almost certainly be added; this
  * padding will then have to be removed by the model_wrapper, which could be error-prone).
  */
-void model_wrapper(hls::stream<axi_s> &data_in, hls::stream<axi_s> &data_out) {
+void model_wrapper(
+    // hls-fpga-machine-learning insert axi streams
+) {
 #pragma HLS INTERFACE ap_ctrl_none port = return
-#pragma HLS INTERFACE axis register port = data_in name = data_in
-#pragma HLS INTERFACE axis register port = data_out name = data_out
+// hls-fpga-machine-learning insert interface pragmas
 
     // hls-fpga-machine-learning insert data
 
