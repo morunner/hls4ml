@@ -1,14 +1,17 @@
-import os
-import time
 import ctypes
 import logging
+import os
+import time
+
 import numpy as np
+
 
 class CoyoteOverlay:
     """
     CoyoteOverlay class, similar to NeuralNetworkOverlay for the VivadoAccelerator backend
     This class can be used to run model inference on the FPGA with the CoyoteAccelerator backend
     """
+
     def __init__(self, path: str, project_name: str = 'myproject'):
         """
         Default constructor
@@ -22,21 +25,27 @@ class CoyoteOverlay:
         self.project_name = project_name
 
         # Set up dynamic C library
-        self.coyote_lib = ctypes.cdll.LoadLibrary(
-            f'{self.path}/build/{self.project_name}_cyt_sw/lib/libCoyoteInference.so'
-        )
+        self.coyote_lib = ctypes.cdll.LoadLibrary(f'{self.path}/build/{self.project_name}_cyt_sw/lib/libCoyoteInference.so')
 
-        self.coyote_lib.init_model_inference.argtypes = [ctypes.c_uint, ctypes.c_uint, ctypes.c_uint]
+        self.coyote_lib.init_model_inference.argtypes = [
+            ctypes.c_uint,
+            ctypes.c_uint,
+            np.ctypeslib.ndpointer(dtype=np.uint32, flags='C'),
+            ctypes.c_uint,
+        ]
         self.coyote_lib.init_model_inference.restype = ctypes.POINTER(ctypes.c_void_p)
 
         self.coyote_lib.flush.argtypes = [ctypes.POINTER(ctypes.c_void_p)]
         self.coyote_lib.predict.argtypes = [ctypes.POINTER(ctypes.c_void_p)]
 
-        self.coyote_lib.get_inference_predictions.argtypes = [ctypes.POINTER(ctypes.c_void_p), ctypes.c_uint]
-        self.coyote_lib.get_inference_predictions.restype = ctypes.POINTER(ctypes.c_float)
+        self.coyote_lib.get_inference_predictions.argtypes = [
+            ctypes.POINTER(ctypes.c_void_p),
+            np.ctypeslib.ndpointer(dtype=np.float32, flags='C'),
+            ctypes.c_uint,
+        ]
 
         self.coyote_lib.free_model_inference.argtypes = [ctypes.POINTER(ctypes.c_void_p)]
-        
+
     def program_hacc_fpga(self):
         """
         Utility function for loading the Coyote-hls4ml bitstream and driver
@@ -46,7 +55,7 @@ class CoyoteOverlay:
         """
         os.system(
             f'cd {self.path}/Coyote/driver && '
-            f'make && '  
+            f'make && '
             f'cd ../util && '
             f'bash program_hacc_local.sh ../../build/{self.project_name}_cyt_hw/bitstreams/cyt_top.bit ../driver/build/coyote_driver.ko'
         )
@@ -69,8 +78,9 @@ class CoyoteOverlay:
         np_pointer_nd = np.ctypeslib.ndpointer(dtype=np.float32, ndim=len(X[0].shape), flags='C')
         self.coyote_lib.set_inference_data.argtypes = [ctypes.POINTER(ctypes.c_void_p), np_pointer_nd, ctypes.c_uint]
 
-        model = self.coyote_lib.init_model_inference(batch_size, int(np.prod(X[0].shape)), int(np.prod(y_shape)))
-        
+        out_sizes = np.array([y_shape[1] for _ in range(y_shape[0])]).astype(np.uint32)
+        model = self.coyote_lib.init_model_inference(batch_size, int(np.prod(X[0].shape)), out_sizes, y_shape[0])
+
         cnt = 0
         avg_latency = 0
         avg_throughput = 0
@@ -84,14 +94,14 @@ class CoyoteOverlay:
                 ts = time.time_ns()
                 self.coyote_lib.predict(model)
                 te = time.time_ns()
-
                 time_taken = te - ts
-                avg_latency += (time_taken / 1e3)
-                avg_throughput += (batch_size / (time_taken * 1e-9))
+                avg_latency += time_taken / 1e3
+                avg_throughput += batch_size / (time_taken * 1e-9)
 
                 for j in range(batch_size):
-                    tmp = self.coyote_lib.get_inference_predictions(model, j)
-                    y[total_batches * batch_size + j] = np.ctypeslib.as_array(tmp, shape=y_shape)
+                    tmp = np.zeros(y_shape, dtype=np.float32)
+                    self.coyote_lib.get_inference_predictions(model, tmp, j)
+                    y[total_batches * batch_size + j] = tmp
 
                 cnt = 0
                 total_batches += 1
@@ -101,4 +111,4 @@ class CoyoteOverlay:
         print(f'Mean latency: {round(avg_latency / total_batches, 3)}us (inference only)')
         print(f'Mean throughput: {round(avg_throughput / total_batches, 1)} samples/s (inference only)')
 
-        return y 
+        return y

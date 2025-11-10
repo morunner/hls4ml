@@ -11,6 +11,7 @@
 #include <chrono>
 #include <fstream>
 #include <iostream>
+#include <numeric>
 #include <string>
 #include <vector>
 
@@ -37,7 +38,8 @@ int main(int argc, char **argv) {
 
     // hls-fpga-machine-learning insert I/O size
 
-    CoyoteInference model(batch_size, in_size, out_size);
+    CoyoteInference model(batch_size, in_size, out_sizes, n_out);
+    const unsigned int overall_out_size = std::accumulate(std::begin(out_sizes), std::end(out_sizes), 0, std::plus<int>());
 
     std::string iline;
     std::string pline;
@@ -87,9 +89,10 @@ int main(int argc, char **argv) {
 
                 // Functional correctness
                 for (int i = 0; i < batch_size; i++) {
-                    float *pred = model.get_predictions(i);
-                    for (int j = 0; j < out_size; j++) {
-                        assert(int(10000.0 * labels[i][j]) == int(10000.0 * pred[j]));
+                    float predictions[overall_out_size];
+                    model.get_predictions(predictions, i);
+                    for (int j = 0; j < overall_out_size; j++) {
+                        assert(int(10000.0 * labels[i][j]) == int(10000.0 * predictions[j]));
                     }
                 }
 
