@@ -5,14 +5,16 @@
 #include "cThread.hpp"
 #include <vector>
 
-// Coyote uses so-called vFPGAs: individual applications running in parallel on the FPGA
-// Users can deploy multiple vFPGAs on the same hardware, each with its own application
-// For now, the CoyoteAccelerator only supports a single vFPGA, though future extensions
-// could easily allow multiple parallel instance of hls4ml models
+// Coyote uses so-called vFPGAs: individual applications running in parallel on
+// the FPGA Users can deploy multiple vFPGAs on the same hardware, each with its
+// own application For now, the CoyoteAccelerator only supports a single vFPGA,
+// though future extensions could easily allow multiple parallel instance of
+// hls4ml models
 #define DEFAULT_VFPGA_ID 0
 
 /**
-  * @brief Utility class for running inference of an hls4ml model with the Coyote accelerator backend
+  * @brief Utility class for running inference of an hls4ml model with the
+  Coyote accelerator backend
   *
   * This class can be used to set up and execute the inference, by allocating memory for the tensors,
   * running the inference, and retrieving predictions. It abstracts away all the interaciton with the
@@ -20,7 +22,8 @@
   * This class assumes some familiarity with the Coyote software library; examples of its use
   * can be found on Github examples: https://github.com/fpgasystems/Coyote/tree/master/examples.
   *
-  * NOTE: This class can be linked into a shared library and called from the Python overlay (CoyoteOverlay) or
+  * NOTE: This class can be linked into a shared library and called from the
+  Python overlay (CoyoteOverlay) or
   * it can be instantiated stand-alone in a C++ code.
   *
   * NOTE: The functions set_data, predict and get_prediction are separated, simply to be able to obtain granular
@@ -40,20 +43,28 @@ class CoyoteInference {
     /**
      * @brief Constructor for CoyoteInference
      * @param batch_size Number of samples in a batch
-     * @param in_size Size of the input tensor (in elements)
-     * @param out_size Size of the output tensor (in elements)
+     * @param in_sizes Sizes of the input tensors (in elements)
+     * @param out_sizes Sizes of the output tensors (in elements)
+     * @param in_sizes_len Length of the input size array
+     * @param out_sizes_len Length of the output size array
+     *
+     * NOTE: The batch size is not a hardware/synthesis parameter, but rather a
+     * runtime parameter Coyote supports asynchronous execution of request, so the
+     * software can invoke multiple inputs, as specified by the batch size, and
+     * the hardware handles the scheduling, any back-pressure etc.
      *
      * NOTE: The batch size is not a hardware/synthesis parameter, but rather a runtime parameter
      * Coyote supports asynchronous execution of request, so the software can invoke multiple
      * inputs, as specified by the batch size, and the hardware handles the scheduling, any back-pressure etc.
      */
-    CoyoteInference(unsigned int batch_size, unsigned int in_size, unsigned int out_size);
+    CoyoteInference(unsigned int batch_size, unsigned int in_size, unsigned int *out_sizes, unsigned int n_out);
 
     /// Default destructor
     ~CoyoteInference();
 
     /**
-     * @brief Utility function, clears completion counters in Coyote and resets output tensors to zero
+     * @brief Utility function, clears completion counters in Coyote and resets
+     * output tensors to zero
      */
     void flush();
 
@@ -76,10 +87,12 @@ class CoyoteInference {
      * @param i Index of the batch entry to get predictions for
      * @return Pointer to the output predictions (array of floats)
      */
-    float *get_predictions(unsigned int i);
+    void get_predictions(float *predictions, unsigned int i);
 
   private:
-    unsigned int batch_size, in_size, out_size;
+    unsigned int batch_size, in_size;
+
+    std::vector<unsigned int> out_sizes;
 
     /**
      * @brief Coyote thread for inference
@@ -95,12 +108,16 @@ class CoyoteInference {
      *
      * Scatter-gather entries are used to specify the source and destination
      * addresses and lengths for data transfers between host memory and the FPGA.
-     * In this case, they point to the input and output tensors for each batch entry.
+     * In this case, they point to (one or multiple) input and output tensors for
+     * each batch entry.
      */
-    std::vector<coyote::localSg> src_sgs, dst_sgs;
+    std::vector<coyote::localSg> src_sgs;
+    std::vector<std::vector<coyote::localSg>> dst_sgs;
 
-    /// Memory pointers for input tensors (one per batch entry)
-    std::vector<float *> src_mems, dst_mems;
+    /// Memory pointers for input/output tensors (one per input/output, per batch
+    /// entry)
+    std::vector<float *> src_mems;
+    std::vector<std::vector<float *>> dst_mems;
 };
 
 #endif
