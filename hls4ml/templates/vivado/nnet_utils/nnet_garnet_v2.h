@@ -76,12 +76,13 @@ template <class res_T, typename CONFIG_T> res_T garnetlayer_acc_tree(res_T data[
 
     res_T acc_buf[CONFIG_T::V];
     res_T acc_buf_next[CONFIG_T::V];
-#pragma HLS ARRAY_PARTITION variable = acc_buf off = true
-#pragma HLS ARRAY_PARTITION variable = acc_buf_next off = true
+#pragma HLS ARRAY_PARTITION variable = acc_buf complete
+#pragma HLS ARRAY_PARTITION variable = acc_buf_next complete
+#pragma HLS ARRAY_PARTITION variable = data complete
 
 AccTreeDepth:
     for (int d = 0; d < D_tree; d++) {
-#pragma HLS PIPELINE II = 1
+#pragma HLS UNROLL
     AccTreeWidth:
         for (int w = 0; w < W_tree; w++) {
 #pragma HLS UNROLL
