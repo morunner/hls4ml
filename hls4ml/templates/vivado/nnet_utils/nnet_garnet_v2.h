@@ -14,36 +14,25 @@ struct garnetlayer_config {
 
 inline float garnet_exp_fcn_float(float input) { return std::exp(input); }
 
-template <class data_T, typename CONFIG_T> ap_uint<CONFIG_T::exp_table_size_nbits> garnet_idx_from_real_val(data_T x) {
+template <class data_T, typename CONFIG_T> inline unsigned garnet_idx_from_real_val(data_T x) {
     if (x < 0)
         x = -x;
 
-    // Instead of simply shifting by CONFIG_T::exptable_indexing_shmt, we slice off the required bits for indexing.
-    unsigned int cutoff = (x.width - x.iwidth) + (CONFIG_T::exp_table_size_nbits - CONFIG_T::exp_table_indexing_shmt);
-
-    // All integer bits which form a number > CONFIG_T::exp_table_size - 1 (> cutoff) when shifted can directly be discarded.
-    if (x.range(x.width - 1, cutoff) != 0) {
-        return (ap_uint<CONFIG_T::exp_table_size_nbits>)CONFIG_T::exp_table_size - 1;
-    }
-
-    // Slice the bits such that the op correspond to a `<< CONFIG_T::exp_table_indexing_shmt` operation
-    return (ap_uint<CONFIG_T::exp_table_size_nbits>)x(cutoff, cutoff - CONFIG_T::exp_table_size_nbits);
+    // FIXME: infer data type conversion from training
+    unsigned idx = (unsigned)((ap_fixed<32, 16>)x << CONFIG_T::exp_table_indexing_shmt);
+    idx = (idx > CONFIG_T::exp_table_size - 1) ? CONFIG_T::exp_table_size - 1 : idx;
+    idx = (idx < 0) ? 0 : idx;
+    return idx;
 }
 
 template <class exp_table_T, typename CONFIG_T> void garnet_init_exp_table(exp_table_T table_out[CONFIG_T::exp_table_size]) {
-#pragma HLS ARRAY_PARTITION variable = table_out complete
     // Set exp for small distances to one to give room for optimizations
     table_out[0] = 1;
     // Set exp for large distances to zero to give room for optimizations
     table_out[CONFIG_T::exp_table_size - 1] = 0;
 
-InitExpTable:
     for (unsigned i = 0; i < CONFIG_T::exp_table_size - 2; i++) {
-#pragma HLS UNROLL
-        // Max int amount is CONFIG_T::exp_table_size - 1, max fraction is 0 >> CONFIG_T::exp_table_indexing_shmt
-        float val = (float)((ap_ufixed<CONFIG_T::exp_table_size_nbits + CONFIG_T::exp_table_indexing_shmt,
-                                       CONFIG_T::exp_table_size_nbits>)(i + 1) >>
-                            CONFIG_T::exp_table_indexing_shmt);
+        float val = (float)((ap_fixed<32, 16>)(i + 1) >> CONFIG_T::exp_table_indexing_shmt);
         exp_table_T exp_x = garnet_exp_fcn_float(-val * val);
         table_out[i] = exp_x;
     }
@@ -52,18 +41,13 @@ InitExpTable:
 template <class data_T, class exp_table_T, typename CONFIG_T>
 void garnet_init_weights(data_T distances[CONFIG_T::V * CONFIG_T::S], exp_table_T exp_table[CONFIG_T::exp_table_size],
                          exp_table_T weights[CONFIG_T::V * CONFIG_T::S]) {
-#pragma HLS ARRAY_PARTITION variable = distances complete
-#pragma HLS ARRAY_PARTITION variable = exp_table complete
-#pragma HLS ARRAY_PARTITION variable = weights complete
-
 InitWeightsOuter:
     for (int s = 0; s < CONFIG_T::S; s++) {
 #pragma HLS UNROLL
     InitWeightsInner:
         for (int v = 0; v < CONFIG_T::V; v++) {
 #pragma HLS UNROLL
-            ap_uint<CONFIG_T::exp_table_size_nbits> idx =
-                garnet_idx_from_real_val<data_T, CONFIG_T>(distances[v * CONFIG_T::S + s]);
+            unsigned idx = garnet_idx_from_real_val<data_T, CONFIG_T>(distances[v * CONFIG_T::S + s]);
             weights[s * CONFIG_T::V + v] = exp_table[idx];
         }
     }
