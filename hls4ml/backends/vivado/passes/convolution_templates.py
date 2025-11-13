@@ -101,11 +101,8 @@ class Conv1DConfigTemplate(LayerConfigTemplate):
             and node.get_attr('strategy').lower() == 'latency'
             and node.model.config.get_config_value('IOType') == 'io_parallel'
         )
-
-        n_partitions = node.attributes['n_partitions']
-
-        if is_pointwise_parallel_latency and n_partitions == 1:
-            params['conv_fn'] = 'nnet::BatchedDenseForConv1D'
+        if is_pointwise_parallel_latency:
+            params['conv_fn'] = f'{namespace}::pointwise_conv_{node.index}'
         else:
             if node.get_attr('strategy').lower() == 'latency':
                 params['conv_fn'] = 'nnet::Conv1DLatency'
@@ -118,11 +115,11 @@ class Conv1DConfigTemplate(LayerConfigTemplate):
         conv_config = self.template.format(**params)
 
         mult_params = self._default_config_params(node)
-        if is_pointwise_parallel_latency and n_partitions == 1:
-            mult_params['n_in'] = (
-                node.get_attr('in_width') * node.get_attr('n_chan') * node.get_attr('filt_width') // n_partitions
+        if is_pointwise_parallel_latency:
+            mult_params['n_in'] = int(
+                node.get_attr('in_width') * node.get_attr('n_chan') * node.get_attr('filt_width') / mult_params['reuse']
             )
-            mult_params['n_out'] = node.get_attr('in_width') * node.get_attr('n_filt') // n_partitions
+            mult_params['n_out'] = int(node.get_attr('in_width') * node.get_attr('n_filt') / mult_params['reuse'])
         else:
             mult_params['n_in'] = node.get_attr('n_chan') * node.get_attr('filt_width')
             mult_params['n_out'] = node.get_attr('n_filt')
