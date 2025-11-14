@@ -85,11 +85,11 @@ AccTreeDepth:
 template <class input1_T, class exp_table_T, class res_T, typename CONFIG_T>
 void garnet_main_loop(input1_T input1[CONFIG_T::V * CONFIG_T::N], exp_table_T weights[CONFIG_T::V * CONFIG_T::S],
                       res_T res[CONFIG_T::S * CONFIG_T::N]) {
-Features:
-    for (int n = 0; n < CONFIG_T::N; n++) {
+Aggregators:
+    for (int s = 0; s < CONFIG_T::S; s++) {
 #pragma HLS PIPELINE II = 1
-    Aggregators:
-        for (int s = 0; s < CONFIG_T::S; s++) {
+    Features:
+        for (int n = 0; n < CONFIG_T::N; n++) {
 #pragma HLS UNROLL
             res_T feature_buf[CONFIG_T::V];
             res_T weight_buf[CONFIG_T::V];
