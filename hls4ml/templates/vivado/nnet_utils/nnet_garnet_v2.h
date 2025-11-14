@@ -59,33 +59,27 @@ template <class res_T, typename CONFIG_T> res_T garnetlayer_acc_tree(res_T data[
     int w_current = W_tree;
 
     res_T acc_buf[CONFIG_T::V];
-    res_T acc_buf_next[CONFIG_T::V];
 #pragma HLS ARRAY_PARTITION variable = acc_buf complete
-#pragma HLS ARRAY_PARTITION variable = acc_buf_next complete
 #pragma HLS ARRAY_PARTITION variable = data complete
 
 AccTreeDepth:
     for (int d = 0; d < D_tree; d++) {
-#pragma HLS UNROLL
+#pragma HLS PIPELINE II = 1
     AccTreeWidth:
         for (int w = 0; w < W_tree; w++) {
 #pragma HLS UNROLL
             if (d == 0) { // Leaf nodes
                 acc_buf[w] = data[w];
             } else if (w < w_current) {
-                acc_buf[w] = acc_buf_next[w * 2] + acc_buf_next[w * 2 + 1];
-            } else { // Set unused array elements to zero to allow potential HLS optimizations
-                acc_buf[w] = 0;
+                acc_buf[w] = acc_buf[w * 2] + acc_buf[w * 2 + 1];
             }
-            // Shift register
-            acc_buf_next[w] = acc_buf[w];
         }
         // Tree width decreases on every layer
         w_current >>= 1;
     }
 
     // Root node is in first element and stores result
-    return acc_buf_next[0];
+    return acc_buf[0];
 }
 
 template <class input1_T, class exp_table_T, class res_T, typename CONFIG_T>
