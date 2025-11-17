@@ -62,7 +62,7 @@ InitWeightsOuter:
 template <class res_T, typename CONFIG_T> res_T garnetlayer_acc_tree(res_T data[CONFIG_T::V]) {
     int D_tree = CONFIG_T::V_nbits; // Include root node
     int W_tree = CONFIG_T::V;
-    int w_current = W_tree;
+    int w_current = W_tree / 2;
 
     res_T acc_buf[CONFIG_T::V];
 #pragma HLS ARRAY_PARTITION variable = acc_buf complete
@@ -78,9 +78,9 @@ AccTreeDepth:
     for (int d = 0; d < D_tree; d++) {
 #pragma HLS PIPELINE II = 1
     AccTreeWidth:
-        for (int w = 0; w < W_tree; w++) {
+        for (int w = 0; w < W_tree / 2; w++) {
 #pragma HLS UNROLL
-            if (w < w_current / 2) {
+            if (w < w_current) {
                 acc_buf[w] = acc_buf[w * 2] + acc_buf[w * 2 + 1];
             }
         }
