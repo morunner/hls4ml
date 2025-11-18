@@ -1560,16 +1560,10 @@ class GarNetLayer(Layer):
         Attribute('N'),
         Attribute('max_dist_input', value_type=float),
         Attribute('exponential_table',value_type=dict,default={'ScaleFactor': None, 'Resolution': 64},configurable=True),
-        TypeAttribute('exp_table'),
+        TypeAttribute('exp_table', default=FixedPrecisionType(width=16, integer=1, signed=False), configurable=True),
     ]
 
     def initialize(self):
-        # Set default attributes. These can still be tuned by the user
-        if self.get_attr('exp_table_t', None) is None:
-            # Two integer bits should be enough, since max(exp(-dist * dist)) = 1
-            # Additionally keep one sign bit
-            self.set_attr('exp_table_t', FixedPrecisionType(width=16, integer=2, signed=True))
-
         exp_table_params = self.get_attr('exponential_table', None)
         assert exp_table_params is not None
         if exp_table_params['ScaleFactor'] is None:
