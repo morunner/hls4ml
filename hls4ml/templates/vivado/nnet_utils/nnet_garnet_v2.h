@@ -37,25 +37,10 @@ template <class exp_table_T, typename CONFIG_T> void garnet_init_exp_table(exp_t
     table_out[CONFIG_T::exp_table_size - 1] = 0.0f;
 
     for (unsigned i = 1; i < CONFIG_T::exp_table_size - 1; i++) {
+#pragma HLS UNROLL
         float val = (float)((ap_fixed<32, 16>)(i + 1) >> CONFIG_T::exp_table_indexing_shmt);
         exp_table_T exp_x = garnet_exp_fcn_float(-val * val) / (float)CONFIG_T::V;
         table_out[i] = exp_x;
-    }
-}
-
-template <class data_T, class exp_table_T, typename CONFIG_T>
-void garnet_init_weights(data_T distances[CONFIG_T::V * CONFIG_T::S], exp_table_T exp_table[CONFIG_T::exp_table_size],
-                         exp_table_T weights[CONFIG_T::V * CONFIG_T::S]) {
-InitWeightsOuter:
-    for (int s = 0; s < CONFIG_T::S; s++) {
-#pragma HLS UNROLL
-    InitWeightsInner:
-        for (int v = 0; v < CONFIG_T::V; v++) {
-#pragma HLS UNROLL
-            ap_uint<CONFIG_T::exp_table_size_nbits> idx =
-                garnet_idx_from_real_val<data_T, CONFIG_T>(distances[v * CONFIG_T::S + s]);
-            weights[s * CONFIG_T::V + v] = exp_table[idx];
-        }
     }
 }
 
@@ -116,7 +101,6 @@ Aggregators:
     Features:
         for (int n = 0; n < CONFIG_T::N; n++) {
 #pragma HLS UNROLL
-
         InitializeBuffers:
             for (int v = 0; v < CONFIG_T::V; v++) {
 #pragma HLS UNROLL
@@ -135,10 +119,19 @@ void garnetlayer(input1_T input1[CONFIG_T::V * CONFIG_T::N], input2_T input2[CON
 #pragma HLS ARRAY_PARTITION variable = input2 complete
 #pragma HLS ARRAY_PARTITION variable = res complete
 
-    exp_table_T exp_table[CONFIG_T::exp_table_size];
-#pragma HLS ARRAY_PARTITION variable = exp_table complete
 
-    garnet_init_exp_table<exp_table_T, CONFIG_T>(exp_table);
+#ifdef __HLS_SYN__
+    bool initialized = false;
+    exp_table_T exp_table[CONFIG_T::exp_table_size];
+#else
+    static bool initialized = false;
+    static exp_table_T exp_table[CONFIG_T::exp_table_size];
+#endif
+
+    if (!initialized) {
+        garnet_init_exp_table<exp_table_T, CONFIG_T>(exp_table);
+        initialized = true;
+    }
     garnet_main_loop<input1_T, input2_T, exp_table_T, res_T, CONFIG_T>(input1, input2, exp_table, res);
 }
 
