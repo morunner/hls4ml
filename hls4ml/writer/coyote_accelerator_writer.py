@@ -1,9 +1,10 @@
+import glob
 import os
 import stat
-import glob
-import numpy as np
 from pathlib import Path
 from shutil import copyfile, copytree, move, rmtree
+
+import numpy as np
 
 from hls4ml.writer.vitis_writer import VitisWriter
 
@@ -20,8 +21,8 @@ class CoyoteAcceleratorWriter(VitisWriter):
             model (ModelGraph): the hls4ml model
         """
         filedir = os.path.dirname(os.path.abspath(__file__))
-        srcpath = os.path.join(filedir, '../contrib/Coyote/')
-        dstpath = f'{model.config.get_output_dir()}/Coyote'
+        srcpath = os.path.join(filedir, "../contrib/Coyote/")
+        dstpath = f"{model.config.get_output_dir()}/Coyote"
         if os.path.isdir(dstpath):
             rmtree(dstpath)
         copytree(srcpath, dstpath)
@@ -35,12 +36,12 @@ class CoyoteAcceleratorWriter(VitisWriter):
         Args:
             model (ModelGraph): the hls4ml model
         """
-        srcpath = f'{model.config.get_output_dir()}/{model.config.get_project_name()}_bridge.cpp'
-        dstpath = f'{model.config.get_output_dir()}/src/{model.config.get_project_name()}_bridge.cpp'
+        srcpath = f"{model.config.get_output_dir()}/{model.config.get_project_name()}_bridge.cpp"
+        dstpath = f"{model.config.get_output_dir()}/src/{model.config.get_project_name()}_bridge.cpp"
         move(srcpath, dstpath)
 
-        srcpath = f'{model.config.get_output_dir()}/firmware'
-        dstpath = f'{model.config.get_output_dir()}/src/hls/model_wrapper/firmware'
+        srcpath = f"{model.config.get_output_dir()}/firmware"
+        dstpath = f"{model.config.get_output_dir()}/src/hls/model_wrapper/firmware"
         if os.path.isdir(dstpath):
             rmtree(dstpath)
         move(srcpath, dstpath)
@@ -59,64 +60,75 @@ class CoyoteAcceleratorWriter(VitisWriter):
 
         filedir = os.path.dirname(os.path.abspath(__file__))
 
-        f = open(os.path.join(filedir, '../templates/vivado/firmware/myproject.cpp'))
-        fout = open(f'{model.config.get_output_dir()}/firmware/{model.config.get_project_name()}.cpp', 'w')
+        f = open(os.path.join(filedir, "../templates/vivado/firmware/myproject.cpp"))
+        fout = open(
+            f"{model.config.get_output_dir()}/firmware/{model.config.get_project_name()}.cpp",
+            "w",
+        )
 
         model_inputs = model.get_input_variables()
         model_outputs = model.get_output_variables()
-        model_brams = [var for var in model.get_weight_variables() if var.storage.lower() == 'bram']
+        model_brams = [
+            var for var in model.get_weight_variables() if var.storage.lower() == "bram"
+        ]
 
-        indent = '    '
+        indent = "    "
 
         for line in f.readlines():
             # Add headers to weights and biases
-            if 'myproject' in line:
-                newline = line.replace('myproject', model.config.get_project_name())
+            if "myproject" in line:
+                newline = line.replace("myproject", model.config.get_project_name())
 
-            elif '// hls-fpga-machine-learning insert header' in line:
-                inputs_str = ', '.join([i.definition_cpp(as_reference=True) for i in model_inputs])
-                outputs_str = ', '.join([o.definition_cpp(as_reference=True) for o in model_outputs])
-                brams_str = ', \n'.join([indent + b.definition_cpp(as_reference=False) for b in model_brams])
+            elif "// hls-fpga-machine-learning insert header" in line:
+                inputs_str = ", ".join(
+                    [i.definition_cpp(as_reference=True) for i in model_inputs]
+                )
+                outputs_str = ", ".join(
+                    [o.definition_cpp(as_reference=True) for o in model_outputs]
+                )
+                brams_str = ", \n".join(
+                    [indent + b.definition_cpp(as_reference=False) for b in model_brams]
+                )
 
-                newline = ''
-                newline += indent + inputs_str + ',\n'
+                newline = ""
+                newline += indent + inputs_str + ",\n"
                 newline += indent + outputs_str
                 if len(model_brams) > 0:
-                    newline += ',\n' + brams_str
-                newline += '\n'
+                    newline += ",\n" + brams_str
+                newline += "\n"
 
-            elif '// hls-fpga-machine-learning insert namespace-start' in line:
-                newline = ''
+            elif "// hls-fpga-machine-learning insert namespace-start" in line:
+                newline = ""
 
-                namespace = model.config.get_writer_config().get('Namespace', None)
+                namespace = model.config.get_writer_config().get("Namespace", None)
                 if namespace is not None:
-                    newline += f'namespace {namespace} {{\n'
+                    newline += f"namespace {namespace} {{\n"
 
-            elif '// hls-fpga-machine-learning insert namespace-end' in line:
-                newline = ''
+            elif "// hls-fpga-machine-learning insert namespace-end" in line:
+                newline = ""
 
-                namespace = model.config.get_writer_config().get('Namespace', None)
+                namespace = model.config.get_writer_config().get("Namespace", None)
                 if namespace is not None:
-                    newline += '}\n'
+                    newline += "}\n"
 
-            elif '// hls-fpga-machine-learning insert load weights' in line:
+            elif "// hls-fpga-machine-learning insert load weights" in line:
                 newline = line
-                if model.config.get_writer_config()['WriteWeightsTxt']:
+                if model.config.get_writer_config()["WriteWeightsTxt"]:
 
-                    newline += '#ifndef __SYNTHESIS__\n'
-                    newline += '    static bool loaded_weights = false;\n'
-                    newline += '    if (!loaded_weights) {\n'
+                    newline += "#ifndef __SYNTHESIS__\n"
+                    newline += "    static bool loaded_weights = false;\n"
+                    newline += "    if (!loaded_weights) {\n"
 
                     for layer in model.get_layers():
                         for w in layer.get_weights():
-                            if w.weight_class == 'CompressedWeightVariable':
+                            if w.weight_class == "CompressedWeightVariable":
                                 newline += (
                                     indent
                                     + '    nnet::load_compressed_weights_from_txt<{}, {}>({}, "{}.txt");\n'.format(
                                         w.type.name, w.nonzeros, w.name, w.name
                                     )
                                 )
-                            elif w.weight_class == 'ExponentWeightVariable':
+                            elif w.weight_class == "ExponentWeightVariable":
                                 newline += (
                                     indent
                                     + '    nnet::load_exponent_weights_from_txt<{}, {}>({}, "{}.txt");\n'.format(
@@ -124,59 +136,64 @@ class CoyoteAcceleratorWriter(VitisWriter):
                                     )
                                 )
                             else:
-                                newline += indent + '    nnet::load_weights_from_txt<{}, {}>({}, "{}.txt");\n'.format(
-                                    w.type.name, w.data_length, w.name, w.name
+                                newline += (
+                                    indent
+                                    + '    nnet::load_weights_from_txt<{}, {}>({}, "{}.txt");\n'.format(
+                                        w.type.name, w.data_length, w.name, w.name
+                                    )
                                 )
 
-                    newline += '        loaded_weights = true;'
-                    newline += '    }\n'
-                    newline += '#endif'
+                    newline += "        loaded_weights = true;"
+                    newline += "    }\n"
+                    newline += "#endif"
 
             # Add input/output type
-            elif '// hls-fpga-machine-learning insert IO' in line:
+            elif "// hls-fpga-machine-learning insert IO" in line:
                 newline = line
-                newline += indent + '#pragma HLS INLINE OFF\n'
+                newline += indent + "#pragma HLS INLINE OFF\n"
 
                 pipeline_style = model.config.pipeline_style
                 pipeline_ii = model.config.pipeline_ii
-                pipeline_pragma = indent + f'#pragma HLS {pipeline_style.upper()}'
-                if pipeline_style == 'pipeline' and pipeline_ii is not None:
-                    pipeline_pragma += f' II={pipeline_ii}\n'
+                pipeline_pragma = indent + f"#pragma HLS {pipeline_style.upper()}"
+                if pipeline_style == "pipeline" and pipeline_ii is not None:
+                    pipeline_pragma += f" II={pipeline_ii}\n"
                 else:
-                    pipeline_pragma += '\n'
+                    pipeline_pragma += "\n"
                 newline += pipeline_pragma
 
-            elif '// hls-fpga-machine-learning insert layers' in line:
-                newline = line + '\n'
+            elif "// hls-fpga-machine-learning insert layers" in line:
+                newline = line + "\n"
                 for layer in model.get_layers():
                     vars = layer.get_variables()
                     for var in vars:
                         if var not in model_inputs and var not in model_outputs:
                             def_cpp = var.definition_cpp()
                             if def_cpp is not None:
-                                newline += '    ' + def_cpp + ';\n'
+                                newline += "    " + def_cpp + ";\n"
                                 if var.pragma:
-                                    newline += '    ' + self._make_array_pragma(var) + '\n\n'
+                                    newline += (
+                                        "    " + self._make_array_pragma(var) + "\n\n"
+                                    )
                 for layer in model.get_layers():
-                    func = layer.get_attr('function_cpp', None)
+                    func = layer.get_attr("function_cpp", None)
                     if func:
                         if not isinstance(func, (list, set)):
                             func = [func]
                         if len(func) == 1:
-                            newline += '    ' + func[0] + ' // ' + layer.name + '\n'
+                            newline += "    " + func[0] + " // " + layer.name + "\n"
                         else:
-                            newline += '    // ' + layer.name + '\n'
+                            newline += "    // " + layer.name + "\n"
                             for line in func:
-                                newline += '    ' + line + '\n'
-                        if model.config.trace_output and layer.get_attr('trace', False):
+                                newline += "    " + line + "\n"
+                        if model.config.trace_output and layer.get_attr("trace", False):
                             vars = layer.get_variables()
-                            newline += '#ifndef __SYNTHESIS__\n'
+                            newline += "#ifndef __SYNTHESIS__\n"
                             for var in vars:
                                 newline += '    nnet::save_layer_output<{}>({}, "{}", {});\n'.format(
                                     var.type.name, var.name, layer.name, var.size_cpp()
                                 )
-                            newline += '#endif\n'
-                        newline += '\n'
+                            newline += "#endif\n"
+                        newline += "\n"
 
             # Just copy line
             else:
@@ -197,16 +214,16 @@ class CoyoteAcceleratorWriter(VitisWriter):
         filedir = os.path.dirname(os.path.abspath(__file__))
 
         # Vitis HLS overwrites, as done in VitisWriter
-        srcpath = os.path.join(filedir, '../templates/vitis/nnet_utils/')
-        dstpath = f'{model.config.get_output_dir()}/firmware/nnet_utils/'
-        headers = [os.path.basename(h) for h in glob.glob(srcpath + '*.h')]
+        srcpath = os.path.join(filedir, "../templates/vitis/nnet_utils/")
+        dstpath = f"{model.config.get_output_dir()}/firmware/nnet_utils/"
+        headers = [os.path.basename(h) for h in glob.glob(srcpath + "*.h")]
         for h in headers:
             copyfile(srcpath + h, dstpath + h)
 
         # Coyote accelerator-specific overvwrites
-        srcpath = os.path.join(filedir, '../templates/coyote_accelerator/nnet_utils/')
-        dstpath = f'{model.config.get_output_dir()}/firmware/nnet_utils/'
-        headers = [os.path.basename(h) for h in glob.glob(srcpath + '*.h')]
+        srcpath = os.path.join(filedir, "../templates/coyote_accelerator/nnet_utils/")
+        dstpath = f"{model.config.get_output_dir()}/firmware/nnet_utils/"
+        headers = [os.path.basename(h) for h in glob.glob(srcpath + "*.h")]
         for h in headers:
             copyfile(srcpath + h, dstpath + h)
 
@@ -222,26 +239,30 @@ class CoyoteAcceleratorWriter(VitisWriter):
         filedir = Path(__file__).parent
 
         # build_lib.sh
-        build_lib_src = (filedir / '../templates/coyote_accelerator/build_lib.sh').resolve()
-        build_lib_dst = Path(f'{model.config.get_output_dir()}/build_lib.sh').resolve()
-        with open(build_lib_src) as src, open(build_lib_dst, 'w') as dst:
+        build_lib_src = (
+            filedir / "../templates/coyote_accelerator/build_lib.sh"
+        ).resolve()
+        build_lib_dst = Path(f"{model.config.get_output_dir()}/build_lib.sh").resolve()
+        with open(build_lib_src) as src, open(build_lib_dst, "w") as dst:
             for line in src.readlines():
-                line = line.replace('myproject', model.config.get_project_name())
-                line = line.replace('mystamp', model.config.get_config_value('Stamp'))
+                line = line.replace("myproject", model.config.get_project_name())
+                line = line.replace("mystamp", model.config.get_config_value("Stamp"))
                 dst.write(line)
 
         build_lib_dst.chmod(build_lib_dst.stat().st_mode | stat.S_IEXEC)
 
         # CMakeLists.txt
-        cmake_src = os.path.join(filedir, '../templates/coyote_accelerator/CMakeLists.txt')
-        cmake_dst = f'{model.config.get_output_dir()}/CMakeLists.txt'
+        cmake_src = os.path.join(
+            filedir, "../templates/coyote_accelerator/CMakeLists.txt"
+        )
+        cmake_dst = f"{model.config.get_output_dir()}/CMakeLists.txt"
         model_inputs = list(model.get_input_variables())
         model_outputs = list(model.get_output_variables())
         n_strm_axi = max(len(model_inputs), len(model_outputs))
-        with open(cmake_src) as src, open(cmake_dst, 'w') as dst:
+        with open(cmake_src) as src, open(cmake_dst, "w") as dst:
             for line in src.readlines():
-                line = line.replace('myproject', model.config.get_project_name())
-                line = line.replace('N_STRM_AXI 1', f'N_STRM_AXI {n_strm_axi}')
+                line = line.replace("myproject", model.config.get_project_name())
+                line = line.replace("N_STRM_AXI 1", f"N_STRM_AXI {n_strm_axi}")
                 dst.write(line)
 
     def write_model_wrapper(self, model):
@@ -265,22 +286,37 @@ class CoyoteAcceleratorWriter(VitisWriter):
         # if len(model_inputs) > 1 or len(model_outputs) > 1:
         #     raise RuntimeError('CoyoteAccelerator backend currently only supports one input and one output')
 
-        if not os.path.isdir(f'{model.config.get_output_dir()}/src/hls/model_wrapper'):
-            os.makedirs(f'{model.config.get_output_dir()}/src/hls/model_wrapper')
+        if not os.path.isdir(f"{model.config.get_output_dir()}/src/hls/model_wrapper"):
+            os.makedirs(f"{model.config.get_output_dir()}/src/hls/model_wrapper")
 
         # model_wrapper.hpp
-        f = open(os.path.join(filedir, '../templates/coyote_accelerator/model_wrapper.hpp'))
-        fout = open(f'{model.config.get_output_dir()}/src/hls/model_wrapper/model_wrapper.hpp', 'w')
+        f = open(
+            os.path.join(filedir, "../templates/coyote_accelerator/model_wrapper.hpp")
+        )
+        fout = open(
+            f"{model.config.get_output_dir()}/src/hls/model_wrapper/model_wrapper.hpp",
+            "w",
+        )
 
         for line in f.readlines():
-            indent = ' ' * (len(line) - len(line.lstrip(' ')))
-            if 'myproject' in line:
-                newline = line.replace('myproject', model.config.get_project_name())
-            elif '// hls-fpga-machine-learning insert axi streams' in line:
-                newline = ',\n'.join([(f'{indent}hls::stream<axi_s> &data_in{i}') for i in range(len(model_inputs))])
-                newline += ',\n'
-                newline += ',\n'.join([(f'{indent}hls::stream<axi_s> &data_out{i}') for i in range(len(model_outputs))])
-                newline += '\n'
+            indent = " " * (len(line) - len(line.lstrip(" ")))
+            if "myproject" in line:
+                newline = line.replace("myproject", model.config.get_project_name())
+            elif "// hls-fpga-machine-learning insert axi streams" in line:
+                newline = ",\n".join(
+                    [
+                        (f"{indent}hls::stream<axi_s> &data_in{i}")
+                        for i in range(len(model_inputs))
+                    ]
+                )
+                newline += ",\n"
+                newline += ",\n".join(
+                    [
+                        (f"{indent}hls::stream<axi_s> &data_out{i}")
+                        for i in range(len(model_outputs))
+                    ]
+                )
+                newline += "\n"
             else:
                 newline = line
 
@@ -290,67 +326,82 @@ class CoyoteAcceleratorWriter(VitisWriter):
         fout.close()
 
         # model_wrapper.cpp
-        f = open(os.path.join(filedir, '../templates/coyote_accelerator/model_wrapper.cpp'))
-        fout = open(f'{model.config.get_output_dir()}/src/hls/model_wrapper/model_wrapper.cpp', 'w')
+        f = open(
+            os.path.join(filedir, "../templates/coyote_accelerator/model_wrapper.cpp")
+        )
+        fout = open(
+            f"{model.config.get_output_dir()}/src/hls/model_wrapper/model_wrapper.cpp",
+            "w",
+        )
 
         for line in f.readlines():
-            indent = ' ' * (len(line) - len(line.lstrip(' ')))
-            if 'myproject' in line:
-                newline = line.replace('myproject', model.config.get_project_name())
+            indent = " " * (len(line) - len(line.lstrip(" ")))
+            if "myproject" in line:
+                newline = line.replace("myproject", model.config.get_project_name())
 
-            elif '// hls-fpga-machine-learning insert axi streams' in line:
-                newline = ',\n'.join([(f'{indent}hls::stream<axi_s> &data_in{i}') for i in range(len(model_inputs))])
-                newline += ',\n'
-                newline += ',\n'.join([(f'{indent}hls::stream<axi_s> &data_out{i}') for i in range(len(model_outputs))])
-                newline += '\n'
+            elif "// hls-fpga-machine-learning insert axi streams" in line:
+                newline = ",\n".join(
+                    [
+                        (f"{indent}hls::stream<axi_s> &data_in{i}")
+                        for i in range(len(model_inputs))
+                    ]
+                )
+                newline += ",\n"
+                newline += ",\n".join(
+                    [
+                        (f"{indent}hls::stream<axi_s> &data_out{i}")
+                        for i in range(len(model_outputs))
+                    ]
+                )
+                newline += "\n"
 
-            elif '// hls-fpga-machine-learning insert interface pragmas' in line:
-                newline = '\n'.join(
+            elif "// hls-fpga-machine-learning insert interface pragmas" in line:
+                newline = "\n".join(
                     [
                         f"#pragma HLS INTERFACE axis register port = data_in{i} name = data_in{i}"
                         for i in range(len(model_inputs))
                     ]
                 )
-                newline += '\n'
-                newline += '\n'.join(
+                newline += "\n"
+                newline += "\n".join(
                     [
-                        f'#pragma HLS INTERFACE axis register port = data_out{i} name = data_out{i}'
+                        f"#pragma HLS INTERFACE axis register port = data_out{i} name = data_out{i}"
                         for i in range(len(model_outputs))
                     ]
                 )
-                newline += '\n'
+                newline += "\n"
 
-            elif '// hls-fpga-machine-learning insert data' in line:
-                newline = ''
-                io_type = model.config.get_config_value('IOType')
+            elif "// hls-fpga-machine-learning insert data" in line:
+                newline = ""
+                io_type = model.config.get_config_value("IOType")
 
                 for inp in model_inputs:
-                    newline += indent + inp.definition_cpp() + ';\n'
-                    newline += indent + self._make_array_pragma(inp) + '\n\n'
+                    newline += indent + inp.definition_cpp() + ";\n"
+                    newline += indent + self._make_array_pragma(inp) + "\n\n"
 
                 for out in model_outputs:
-                    newline += indent + out.definition_cpp() + ';\n'
-                    newline += indent + self._make_array_pragma(out) + '\n\n'
+                    newline += indent + out.definition_cpp() + ";\n"
+                    newline += indent + self._make_array_pragma(out) + "\n\n"
 
-            elif '// hls-fpga-machine-learning insert top-level function' in line:
-                newline = ''
+            elif "// hls-fpga-machine-learning insert top-level function" in line:
+                newline = ""
 
                 for i, inp in enumerate(model_inputs):
                     newline += (
                         indent
-                        + f'nnet::axi_stream_to_data<{inp.type.name}, float, {inp.size_cpp()}, COYOTE_AXI_STREAM_BITS, 8 * sizeof(float)>(data_in{i}, {inp.name});\n'
+                        + f"nnet::axi_stream_to_data<{inp.type.name}, float, {inp.size_cpp()}, COYOTE_AXI_STREAM_BITS, 8 * sizeof(float)>(data_in{i}, {inp.name});\n"
                     )
 
-                input_vars = ','.join([i.name for i in model_inputs])
-                output_vars = ','.join([o.name for o in model_outputs])
-                all_vars = ','.join(filter(None, [input_vars, output_vars]))
-                top_level = indent + f'{model.config.get_project_name()}({all_vars});\n'
+                input_vars = ",".join([i.name for i in model_inputs])
+                output_vars = ",".join([o.name for o in model_outputs])
+                all_vars = ",".join(filter(None, [input_vars, output_vars]))
+                top_level = indent + f"{model.config.get_project_name()}({all_vars});\n"
                 newline += top_level
 
                 for i, out in enumerate(model_outputs):
                     newline += (
                         indent
-                        + f'nnet::data_to_axi_stream<{out.type.name}, float, {out.size_cpp()}, COYOTE_AXI_STREAM_BITS, 8 * sizeof(float)>({out.name}, data_out{i});\n'
+                        + f"nnet::data_to_axi_stream<{out.type.name}, float, {out.size_cpp()}, COYOTE_AXI_STREAM_BITS, 8 * sizeof(float)>({out.name}, data_out{i});\n"
                     )
 
             else:
@@ -363,41 +414,72 @@ class CoyoteAcceleratorWriter(VitisWriter):
 
         # vfpga_top.svh
         filedir = os.path.dirname(os.path.abspath(__file__))
-        f = open(os.path.join(filedir, '../templates/coyote_accelerator/vfpga_top.svh'))
-        fout = open(f'{model.config.get_output_dir()}/src/vfpga_top.svh', 'w')
+        f = open(os.path.join(filedir, "../templates/coyote_accelerator/vfpga_top.svh"))
+        fout = open(f"{model.config.get_output_dir()}/src/vfpga_top.svh", "w")
 
         for line in f.readlines():
-            indent = ' ' * (len(line) - len(line.lstrip(' ')))
-            if '// hls-fpga-machine-learning insert axi connections' in line:
-                newline = ''
+            indent = " " * (len(line) - len(line.lstrip(" ")))
+            if "// hls-fpga-machine-learning insert axi connections" in line:
+                newline = ""
                 for i, inp in enumerate(model_inputs):
-                    newline += indent + f'.data_in{i}_TDATA        (axis_host_recv[{i}].tdata),\n'
-                    newline += indent + f'.data_in{i}_TKEEP        (axis_host_recv[{i}].tkeep),\n'
-                    newline += indent + f'.data_in{i}_TLAST        (axis_host_recv[{i}].tlast),\n'
-                    newline += indent + f'.data_in{i}_TSTRB        (0),\n'
-                    newline += indent + f'.data_in{i}_TVALID       (axis_host_recv[{i}].tvalid),\n'
-                    newline += indent + f'.data_in{i}_TREADY       (axis_host_recv[{i}].tready),\n'
-                    newline += '\n'
+                    newline += (
+                        indent
+                        + f".data_in{i}_TDATA        (axis_host_recv[{i}].tdata),\n"
+                    )
+                    newline += (
+                        indent
+                        + f".data_in{i}_TKEEP        (axis_host_recv[{i}].tkeep),\n"
+                    )
+                    newline += (
+                        indent
+                        + f".data_in{i}_TLAST        (axis_host_recv[{i}].tlast),\n"
+                    )
+                    newline += indent + f".data_in{i}_TSTRB        (0),\n"
+                    newline += (
+                        indent
+                        + f".data_in{i}_TVALID       (axis_host_recv[{i}].tvalid),\n"
+                    )
+                    newline += (
+                        indent
+                        + f".data_in{i}_TREADY       (axis_host_recv[{i}].tready),\n"
+                    )
+                    newline += "\n"
 
                 for i, out in enumerate(model_outputs):
-                    newline += indent + f'.data_out{i}_TDATA       (axis_host_send[{i}].tdata),\n'
-                    newline += indent + f'.data_out{i}_TKEEP       (axis_host_send[{i}].tkeep),\n'
-                    newline += indent + f'.data_out{i}_TLAST       (axis_host_send[{i}].tlast),\n'
-                    newline += indent + f'.data_out{i}_TSTRB       (),\n'
-                    newline += indent + f'.data_out{i}_TVALID      (axis_host_send[{i}].tvalid),\n'
-                    newline += indent + f'.data_out{i}_TREADY      (axis_host_send[{i}].tready),\n'
-                    newline += '\n'
-            elif '// hls-fpga-machine-learning tie off host streams' in line:
-                newline = ''
+                    newline += (
+                        indent
+                        + f".data_out{i}_TDATA       (axis_host_send[{i}].tdata),\n"
+                    )
+                    newline += (
+                        indent
+                        + f".data_out{i}_TKEEP       (axis_host_send[{i}].tkeep),\n"
+                    )
+                    newline += (
+                        indent
+                        + f".data_out{i}_TLAST       (axis_host_send[{i}].tlast),\n"
+                    )
+                    newline += indent + f".data_out{i}_TSTRB       (),\n"
+                    newline += (
+                        indent
+                        + f".data_out{i}_TVALID      (axis_host_send[{i}].tvalid),\n"
+                    )
+                    newline += (
+                        indent
+                        + f".data_out{i}_TREADY      (axis_host_send[{i}].tready),\n"
+                    )
+                    newline += "\n"
+            elif "// hls-fpga-machine-learning tie off host streams" in line:
+                newline = ""
                 stream_diff = len(model_inputs) - len(model_outputs)
                 if stream_diff > 0:
                     streams_to_tie_off = [
-                        f'always_comb axis_host_send[{i}].tie_off_m();' for i in range(len(model_outputs), len(model_inputs))
+                        f"always_comb axis_host_send[{i}].tie_off_m();"
+                        for i in range(len(model_outputs), len(model_inputs))
                     ]
                 else:
                     # More output streams than input streams
                     streams_to_tie_off = [
-                        f'always_comb axis_host_recv[{i}].tie_off_m();\n'
+                        f"always_comb axis_host_recv[{i}].tie_off_m();\n"
                         for i in range(len(model_inputs), len(model_outputs))
                     ]
                 for stream in streams_to_tie_off:
@@ -426,25 +508,33 @@ class CoyoteAcceleratorWriter(VitisWriter):
         """
         filedir = Path(__file__).parent
 
-        if not os.path.isdir(f'{model.config.get_output_dir()}/src/'):
-            os.makedirs(f'{model.config.get_output_dir()}/src/')
+        if not os.path.isdir(f"{model.config.get_output_dir()}/src/"):
+            os.makedirs(f"{model.config.get_output_dir()}/src/")
 
         # myproject_host.cpp
-        f = open(os.path.join(filedir, '../templates/coyote_accelerator/myproject_host.cpp'))
-        fout = open(f'{model.config.get_output_dir()}/src/{model.config.get_project_name()}_host.cpp', 'w')
+        f = open(
+            os.path.join(filedir, "../templates/coyote_accelerator/myproject_host.cpp")
+        )
+        fout = open(
+            f"{model.config.get_output_dir()}/src/{model.config.get_project_name()}_host.cpp",
+            "w",
+        )
 
         model_inputs = model.get_input_variables()
         model_outputs = model.get_output_variables()
         if len(model_inputs) > 1:
-            raise RuntimeError('CoyoteAccelerator backend currently only supports one input')
+            raise RuntimeError(
+                "CoyoteAccelerator backend currently only supports one input"
+            )
 
         for line in f.readlines():
-            indent = ' ' * (len(line) - len(line.lstrip(' ')))
+            indent = " " * (len(line) - len(line.lstrip(" ")))
 
-            if '// hls-fpga-machine-learning insert I/O size' in line:
-                newline = ''
+            if "// hls-fpga-machine-learning insert I/O size" in line:
+                newline = ""
                 newline += (
-                    indent + f"unsigned int in_size = " f"{{ {' ,'.join([inp.size_cpp() for inp in model_inputs])} }};\n"
+                    indent + f"unsigned int in_size = "
+                    f"{{ {' ,'.join([inp.size_cpp() for inp in model_inputs])} }};\n"
                 )
                 newline += (
                     indent + f"unsigned int out_sizes[] = "
@@ -461,13 +551,13 @@ class CoyoteAcceleratorWriter(VitisWriter):
         fout.close()
 
         # host_libs.hpp
-        srcpath = os.path.join(filedir, '../templates/coyote_accelerator/host_libs.hpp')
-        dstpath = f'{model.config.get_output_dir()}/src/host_libs.hpp'
+        srcpath = os.path.join(filedir, "../templates/coyote_accelerator/host_libs.hpp")
+        dstpath = f"{model.config.get_output_dir()}/src/host_libs.hpp"
         copyfile(srcpath, dstpath)
 
         # host_libs.cpp
-        srcpath = os.path.join(filedir, '../templates/coyote_accelerator/host_libs.cpp')
-        dstpath = f'{model.config.get_output_dir()}/src/host_libs.cpp'
+        srcpath = os.path.join(filedir, "../templates/coyote_accelerator/host_libs.cpp")
+        dstpath = f"{model.config.get_output_dir()}/src/host_libs.cpp"
         copyfile(srcpath, dstpath)
 
     def __make_dat_file(self, original_path, project_path):
@@ -509,28 +599,43 @@ class CoyoteAcceleratorWriter(VitisWriter):
         """
         filedir = os.path.dirname(os.path.abspath(__file__))
 
-        if not os.path.exists(f'{model.config.get_output_dir()}/tb_data/'):
-            os.mkdir(f'{model.config.get_output_dir()}/tb_data/')
+        if not os.path.exists(f"{model.config.get_output_dir()}/tb_data/"):
+            os.mkdir(f"{model.config.get_output_dir()}/tb_data/")
 
-        input_data = model.config.get_config_value('InputData')
-        output_predictions = model.config.get_config_value('OutputPredictions')
+        input_data = model.config.get_config_value("InputData")
+        output_predictions = model.config.get_config_value("OutputPredictions")
 
         if input_data is not None:
-            if input_data[-3:] == 'dat':
-                copyfile(input_data, f'{model.config.get_output_dir()}/tb_data/tb_input_features.dat')
-            else:
-                self.__make_dat_file(input_data, f'{model.config.get_output_dir()}/tb_data/tb_input_features.dat')
-
-        if output_predictions is not None:
-            if output_predictions[-3:] == 'dat':
-                copyfile(output_predictions, f'{model.config.get_output_dir()}/tb_data/tb_output_predictions.dat')
+            if input_data[-3:] == "dat":
+                copyfile(
+                    input_data,
+                    f"{model.config.get_output_dir()}/tb_data/tb_input_features.dat",
+                )
             else:
                 self.__make_dat_file(
-                    output_predictions, f'{model.config.get_output_dir()}/tb_data/tb_output_predictions.dat'
+                    input_data,
+                    f"{model.config.get_output_dir()}/tb_data/tb_input_features.dat",
                 )
 
-        f = open(os.path.join(filedir, '../templates/coyote_accelerator/myproject_test.cpp'))
-        fout = open(f'{model.config.get_output_dir()}/src/{model.config.get_project_name()}_test.cpp', 'w')
+        if output_predictions is not None:
+            if output_predictions[-3:] == "dat":
+                copyfile(
+                    output_predictions,
+                    f"{model.config.get_output_dir()}/tb_data/tb_output_predictions.dat",
+                )
+            else:
+                self.__make_dat_file(
+                    output_predictions,
+                    f"{model.config.get_output_dir()}/tb_data/tb_output_predictions.dat",
+                )
+
+        f = open(
+            os.path.join(filedir, "../templates/coyote_accelerator/myproject_test.cpp")
+        )
+        fout = open(
+            f"{model.config.get_output_dir()}/src/{model.config.get_project_name()}_test.cpp",
+            "w",
+        )
 
         model_inputs = model.get_input_variables()
         model_outputs = model.get_output_variables()
@@ -538,77 +643,92 @@ class CoyoteAcceleratorWriter(VitisWriter):
         #     raise RuntimeError('CoyoteAccelerator backend currently only supports one input and one output')
 
         for line in f.readlines():
-            indent = ' ' * (len(line) - len(line.lstrip(' ')))
+            indent = " " * (len(line) - len(line.lstrip(" ")))
 
-            if 'myproject' in line:
-                newline = line.replace('myproject', model.config.get_project_name())
+            if "myproject" in line:
+                newline = line.replace("myproject", model.config.get_project_name())
 
-            elif '// hls-fpga-machine-learning insert data' in line:
+            elif "// hls-fpga-machine-learning insert data" in line:
                 newline = line
                 offset = 0
                 for i, inp in enumerate(model_inputs):
-                    newline += indent + f'float {inp.name}[{inp.size_cpp()}];\n'
-                    newline += indent + f'nnet::copy_data<float, float, {offset}, {inp.size_cpp()}>(in, {inp.name});\n'
-                    newline += indent + f'hls::stream<axi_s> data_in{i};\n'
+                    newline += indent + f"float {inp.name}[{inp.size_cpp()}];\n"
                     newline += (
                         indent
-                        + f'nnet::data_to_axi_stream<float, float, {inp.size_cpp()}, COYOTE_AXI_STREAM_BITS, 8 * sizeof(float)>({inp.name}, data_in{i});\n'
+                        + f"nnet::copy_data<float, float, {offset}, {inp.size_cpp()}>(in, {inp.name});\n"
+                    )
+                    newline += indent + f"hls::stream<axi_s> data_in{i};\n"
+                    newline += (
+                        indent
+                        + f"nnet::data_to_axi_stream<float, float, {inp.size_cpp()}, COYOTE_AXI_STREAM_BITS, 8 * sizeof(float)>({inp.name}, data_in{i});\n"
                     )
                     offset += inp.size()
                 for i, out in enumerate(model_outputs):
-                    newline += indent + f'float {out.name}[{out.size_cpp()}];\n'
-                    newline += indent + f'hls::stream<axi_s> data_out{i};\n'
+                    newline += indent + f"float {out.name}[{out.size_cpp()}];\n"
+                    newline += indent + f"hls::stream<axi_s> data_out{i};\n"
 
-            elif '// hls-fpga-machine-learning insert zero' in line:
+            elif "// hls-fpga-machine-learning insert zero" in line:
                 newline = line
                 for i, inp in enumerate(model_inputs):
-                    newline += indent + f'float {inp.name}[{inp.size_cpp()}];\n'
-                    newline += indent + f'nnet::fill_zero<float, {inp.size_cpp()}>({inp.name});\n'
-                    newline += indent + f'hls::stream<axi_s> data_in{i};\n'
+                    newline += indent + f"float {inp.name}[{inp.size_cpp()}];\n"
                     newline += (
                         indent
-                        + f'nnet::data_to_axi_stream<float, float, {inp.size_cpp()}, COYOTE_AXI_STREAM_BITS, 8 * sizeof(float)>({inp.name}, data_in{i});\n'
+                        + f"nnet::fill_zero<float, {inp.size_cpp()}>({inp.name});\n"
+                    )
+                    newline += indent + f"hls::stream<axi_s> data_in{i};\n"
+                    newline += (
+                        indent
+                        + f"nnet::data_to_axi_stream<float, float, {inp.size_cpp()}, COYOTE_AXI_STREAM_BITS, 8 * sizeof(float)>({inp.name}, data_in{i});\n"
                     )
 
                 for i, out in enumerate(model_outputs):
-                    newline += indent + f'float {out.name}[{out.size_cpp()}];\n'
-                    newline += indent + f'hls::stream<axi_s> data_out{i};\n'
+                    newline += indent + f"float {out.name}[{out.size_cpp()}];\n"
+                    newline += indent + f"hls::stream<axi_s> data_out{i};\n"
 
-            elif '// hls-fpga-machine-learning insert top-level-function' in line:
-                data_in = ', '.join(f'data_in{i}' for i in range(len(model_inputs)))
-                data_out = ', '.join(f'data_out{i}' for i in range(len(model_outputs)))
-                model_wrapper_args = f'{data_in}, {data_out}'
+            elif "// hls-fpga-machine-learning insert top-level-function" in line:
+                data_in = ", ".join(f"data_in{i}" for i in range(len(model_inputs)))
+                data_out = ", ".join(f"data_out{i}" for i in range(len(model_outputs)))
+                model_wrapper_args = f"{data_in}, {data_out}"
 
                 newline = line
-                newline += indent + f'model_wrapper({model_wrapper_args});\n'
+                newline += indent + f"model_wrapper({model_wrapper_args});\n"
                 for i, out in enumerate(model_outputs):
                     newline += (
                         indent
-                        + f'nnet::axi_stream_to_data<float, float, {out.size_cpp()}, COYOTE_AXI_STREAM_BITS, 8 * sizeof(float)>(data_out{i}, {out.name});\n'
+                        + f"nnet::axi_stream_to_data<float, float, {out.size_cpp()}, COYOTE_AXI_STREAM_BITS, 8 * sizeof(float)>(data_out{i}, {out.name});\n"
                     )
 
-            elif '// hls-fpga-machine-learning insert predictions' in line:
+            elif "// hls-fpga-machine-learning insert predictions" in line:
                 newline = line
                 for i in range(len(model_outputs)):
                     begin = sum([int(outp.size_cpp()) for outp in model_outputs[:i]])
                     end = sum([int(outp.size_cpp()) for outp in model_outputs[: i + 1]])
-                    newline += indent + f'for (unsigned int i = {str(begin)}; i < {str(end)}; i++) {{\n'
+                    newline += (
+                        indent
+                        + f"for (unsigned int i = {str(begin)}; i < {str(end)}; i++) {{\n"
+                    )
                     newline += indent + '   std::cout << pr[i] << " ";\n'
-                    newline += indent + '}\n'
-                    newline += indent + 'std::cout << std::endl;\n'
+                    newline += indent + "}\n"
+                    newline += indent + "std::cout << std::endl;\n"
 
-            elif '// hls-fpga-machine-learning insert tb-output' in line:
+            elif "// hls-fpga-machine-learning insert tb-output" in line:
                 newline = line
                 for out in model_outputs:
-                    newline += indent + f'nnet::print_result<float, {out.size_cpp()}>({out.name}, fout);\n'
+                    newline += (
+                        indent
+                        + f"nnet::print_result<float, {out.size_cpp()}>({out.name}, fout);\n"
+                    )
 
             elif (
-                '// hls-fpga-machine-learning insert output' in line
-                or '// hls-fpga-machine-learning insert quantized' in line
+                "// hls-fpga-machine-learning insert output" in line
+                or "// hls-fpga-machine-learning insert quantized" in line
             ):
                 newline = line
                 for out in model_outputs:
-                    newline += indent + f'nnet::print_result<float, {out.size_cpp()}>({out.name}, std::cout, true);\n'
+                    newline += (
+                        indent
+                        + f"nnet::print_result<float, {out.size_cpp()}>({out.name}, std::cout, true);\n"
+                    )
 
             else:
                 newline = line
@@ -645,4 +765,4 @@ class CoyoteAcceleratorWriter(VitisWriter):
         self.restructure_dir(model)
         self.write_yml(model)
 
-        print('Done')
+        print("Done")
