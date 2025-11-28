@@ -115,10 +115,9 @@ Aggregators:
 template <class input1_T, class input2_T, class res_T, class exp_table_T, typename CONFIG_T>
 void garnetlayer(input1_T input1[CONFIG_T::V * CONFIG_T::N], input2_T input2[CONFIG_T::V * CONFIG_T::S],
                  res_T res[CONFIG_T::S * CONFIG_T::N]) {
-#pragma HLS ARRAY_PARTITION variable = input1 complete
-#pragma HLS ARRAY_PARTITION variable = input2 complete
-#pragma HLS ARRAY_PARTITION variable = res complete
-
+#pragma HLS ARRAY_PARTITION variable = input1 type = cyclic factor = CONFIG_T::N
+#pragma HLS ARRAY_PARTITION variable = input2 type = cyclic factor = CONFIG_T::S
+#pragma HLS ARRAY_PARTITION variable = res type = block factor = CONFIG_T::S
 
 #ifdef __HLS_SYN__
     bool initialized = false;
