@@ -652,37 +652,37 @@ class CoyoteAcceleratorWriter(VitisWriter):
                 newline = line
                 offset = 0
                 for i, inp in enumerate(model_inputs):
-                    newline += indent + f"float {inp.name}[{inp.size_cpp()}];\n"
+                    newline += indent + f"{inp.definition_cpp()};\n"
                     newline += (
                         indent
-                        + f"nnet::copy_data<float, float, {offset}, {inp.size_cpp()}>(in, {inp.name});\n"
+                        + f"nnet::copy_data<float, {inp.type.name}, {offset}, {inp.size_cpp()}>(in, {inp.name});\n"
                     )
                     newline += indent + f"hls::stream<axi_s> data_in{i};\n"
                     newline += (
                         indent
-                        + f"nnet::data_to_axi_stream<float, float, {inp.size_cpp()}, COYOTE_AXI_STREAM_BITS, 8 * sizeof(float)>({inp.name}, data_in{i});\n"
+                        + f"nnet::data_to_axi_stream<{inp.type.name}, float, {inp.size_cpp()}, COYOTE_AXI_STREAM_BITS, 8 * sizeof(float)>({inp.name}, data_in{i});\n"
                     )
                     offset += inp.size()
                 for i, out in enumerate(model_outputs):
-                    newline += indent + f"float {out.name}[{out.size_cpp()}];\n"
+                    newline += indent + f"{out.definition_cpp()};\n"
                     newline += indent + f"hls::stream<axi_s> data_out{i};\n"
 
             elif "// hls-fpga-machine-learning insert zero" in line:
                 newline = line
                 for i, inp in enumerate(model_inputs):
-                    newline += indent + f"float {inp.name}[{inp.size_cpp()}];\n"
+                    newline += indent + f"{inp.definition_cpp()};\n"
                     newline += (
                         indent
-                        + f"nnet::fill_zero<float, {inp.size_cpp()}>({inp.name});\n"
+                        + f"nnet::fill_zero<{inp.type.name}, {inp.size_cpp()}>({inp.name});\n"
                     )
                     newline += indent + f"hls::stream<axi_s> data_in{i};\n"
                     newline += (
                         indent
-                        + f"nnet::data_to_axi_stream<float, float, {inp.size_cpp()}, COYOTE_AXI_STREAM_BITS, 8 * sizeof(float)>({inp.name}, data_in{i});\n"
+                        + f"nnet::data_to_axi_stream<{inp.type.name}, float, {inp.size_cpp()}, COYOTE_AXI_STREAM_BITS, 8 * sizeof(float)>({inp.name}, data_in{i});\n"
                     )
 
                 for i, out in enumerate(model_outputs):
-                    newline += indent + f"float {out.name}[{out.size_cpp()}];\n"
+                    newline += indent + f"{out.definition_cpp()};\n"
                     newline += indent + f"hls::stream<axi_s> data_out{i};\n"
 
             elif "// hls-fpga-machine-learning insert top-level-function" in line:
@@ -695,7 +695,7 @@ class CoyoteAcceleratorWriter(VitisWriter):
                 for i, out in enumerate(model_outputs):
                     newline += (
                         indent
-                        + f"nnet::axi_stream_to_data<float, float, {out.size_cpp()}, COYOTE_AXI_STREAM_BITS, 8 * sizeof(float)>(data_out{i}, {out.name});\n"
+                        + f"nnet::axi_stream_to_data<{out.type.name}, float, {out.size_cpp()}, COYOTE_AXI_STREAM_BITS, 8 * sizeof(float)>(data_out{i}, {out.name});\n"
                     )
 
             elif "// hls-fpga-machine-learning insert predictions" in line:
@@ -716,7 +716,7 @@ class CoyoteAcceleratorWriter(VitisWriter):
                 for out in model_outputs:
                     newline += (
                         indent
-                        + f"nnet::print_result<float, {out.size_cpp()}>({out.name}, fout);\n"
+                        + f"nnet::print_result<{out.type.name}, {out.size_cpp()}>({out.name}, fout);\n"
                     )
 
             elif (
@@ -727,7 +727,7 @@ class CoyoteAcceleratorWriter(VitisWriter):
                 for out in model_outputs:
                     newline += (
                         indent
-                        + f"nnet::print_result<float, {out.size_cpp()}>({out.name}, std::cout, true);\n"
+                        + f"nnet::print_result<{out.type.name}, {out.size_cpp()}>({out.name}, std::cout, true);\n"
                     )
 
             else:
