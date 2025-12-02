@@ -32,7 +32,13 @@ class CoyoteAcceleratorBackend(VitisBackend):
         writer_passes = ['make_stamp', 'coyoteaccelerator:write_hls']
         self._writer_flow = register_flow('write', writer_passes, requires=['vitis:ip'], backend=self.name)
 
+        # Any potential templates registered specifically for CoyoteAccelerator backend
+        template_flow = register_flow(
+            'apply_templates', self._get_layer_templates, requires=['vivado:init_layers'], backend=self.name
+        )
+
         ip_flow_requirements = get_flow('vitis:ip').requires.copy()
+        ip_flow_requirements.insert(ip_flow_requirements.index('vivado:apply_templates'), template_flow)
         self._default_flow = register_flow('ip', None, requires=ip_flow_requirements, backend=self.name)
 
     def compile(self, model):
