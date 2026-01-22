@@ -595,17 +595,26 @@ def get_ymodel_keras(keras_model, X):
         # If the layer has activation integrated then separate them
         # Note that if the layer is a standalone activation layer then skip this
         name = layer.name
-        if (
-            hasattr(layer, 'activation')
-            and layer.activation is not None
-            and not isinstance(layer, tuple(__keras_activations))
-            and layer.activation.__name__ != 'linear'
-        ):
-            tmp_activation = layer.activation
-            layer.activation = None
-            ymodel.update({layer.name: _get_outputs([layer], X, keras_model.input)})
-            layer.activation = tmp_activation
-            name = layer.name + f'_{tmp_activation.__name__}'
+
+        if hasattr(layer, 'activation') and layer.activation is not None:
+            act = layer.activation
+            if hasattr(act, '__name__'):
+                # Standard functions (e.g. tf.nn.relu)
+                act_name = act.__name__
+            elif hasattr(act, '__class__'):
+                # Class instances (e.g. QKeras objects like quantized_relu)
+                act_name = act.__class__.__name__
+            else:
+                # Fallback
+                act_name = str(act)
+
+            if not isinstance(layer, tuple(__keras_activations)) and act_name != 'linear':
+                tmp_activation = layer.activation
+                layer.activation = None
+                ymodel.update({layer.name: _get_outputs([layer], X, keras_model.input)})
+                layer.activation = tmp_activation
+                name = layer.name + f'_{act_name}'
+
         traced_layers.append(layer)
         layer_names.append(name)
     outputs = _get_outputs(traced_layers, X, keras_model.input)
