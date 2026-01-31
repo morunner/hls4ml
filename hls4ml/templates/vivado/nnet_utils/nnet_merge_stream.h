@@ -307,8 +307,11 @@ ConcatLoopHeight2:
 
 template <class input1_T, class input2_T, class res_T, typename CONFIG_T>
 void concatenate2d_1(hls::stream<input1_T> &data1, hls::stream<input2_T> &data2, hls::stream<res_T> &res) {
+
+    constexpr unsigned n_iterations = (CONFIG_T::n_elem1_0 * CONFIG_T::n_elem1_1) / input1_T::size;
+
 ConcatLoopHeight:
-    for (int i = 0; i < CONFIG_T::n_elem1_0; i++) {
+    for (int i = 0; i < n_iterations; i++) {
         #pragma HLS PIPELINE II=1
 
         input1_T in_data1 = data1.read();

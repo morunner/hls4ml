@@ -1,4 +1,5 @@
 from hls4ml.backends.fpga.fpga_types import APTypeConverter, HLSTypeConverter, StaticWeightVariableConverter
+from hls4ml.backends.fpga.passes.clone import Clone
 from hls4ml.backends.vivado.vivado_types import (
     VivadoArrayVariableConverter,
     VivadoInplaceArrayVariableConverter,
@@ -23,10 +24,23 @@ class TransformTypes(GlobalOptimizerPass):
 
         for out_name, var in node.variables.items():
             if io_type == 'io_stream':
+                depth = node.get_attr('out_stream_depth')
+
+                # Handle Clone nodes
+                if depth != 0:
+                    output_nodes = node.get_output_nodes()
+                    tmp_depth = depth
+                    for output_node in output_nodes:
+                        if isinstance(output_node, Clone):
+                            output_node.set_attr('out_stream_depth', tmp_depth)
+                            depth = 0
+
+                n_pack = node.model.config.get_config_value('StreamPackFactor')
+
                 if isinstance(var, InplaceTensorVariable):
-                    new_var = self.inplace_stream_var_converter.convert(var)
+                    new_var = self.inplace_stream_var_converter.convert(var, n_pack=n_pack, depth=depth)
                 else:
-                    new_var = self.stream_var_converter.convert(var)
+                    new_var = self.stream_var_converter.convert(var, n_pack=n_pack, depth=depth)
             elif io_type == 'io_serial':
                 new_var = self.array_var_converter.convert(var, pragma='stream')
             elif io_type == 'io_parallel':

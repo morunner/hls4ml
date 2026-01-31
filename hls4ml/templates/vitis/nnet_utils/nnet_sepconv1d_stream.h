@@ -45,14 +45,17 @@ void pointwise_conv_1d_cl(hls::stream<data_T> &data, hls::stream<res_T> &res,
     assert(CONFIG_T::pad_left == 0 && CONFIG_T::pad_right == 0);
     assert(CONFIG_T::filt_width == 1);
 
+    constexpr unsigned n_pack = data_T::size / CONFIG_T::n_chan;
+    const unsigned iterations = CONFIG_T::in_width / n_pack;
+
     #pragma HLS ARRAY_PARTITION variable=weights complete
     #pragma HLS ARRAY_PARTITION variable=biases complete
 
     if (CONFIG_T::strategy == nnet::latency || CONFIG_T::strategy == nnet::distributed_arithmetic) {
     ReadInputWidth:
-        for (unsigned i_iw = 0; i_iw < CONFIG_T::in_width; i_iw++) {
+        for (unsigned i_iw = 0; i_iw < iterations; i_iw++) {
             #pragma HLS PIPELINE II=CONFIG_T::reuse_factor
-            if (i_iw % CONFIG_T::stride_width == 0) {
+            if ((i_iw * n_pack) % CONFIG_T::stride_width == 0) {
                 pointwise_mult_buffer<data_T, res_T, CONFIG_T>(data.read(), res, weights, biases);
             } else {
                 data.read();
@@ -60,8 +63,8 @@ void pointwise_conv_1d_cl(hls::stream<data_T> &data, hls::stream<res_T> &res,
         }
     } else {
     ReadInputWidthSerial:
-        for (unsigned i_iw = 0; i_iw < CONFIG_T::in_width; i_iw++) {
-            if (i_iw % CONFIG_T::stride_width == 0) {
+        for (unsigned i_iw = 0; i_iw < iterations; i_iw++) {
+            if ((i_iw * n_pack) % CONFIG_T::stride_width == 0) {
                 pointwise_mult_buffer<data_T, res_T, CONFIG_T>(data.read(), res, weights, biases);
             } else {
                 data.read();

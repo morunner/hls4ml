@@ -61,6 +61,7 @@ class VitisBackend(VivadoBackend):
         clock_period=5,
         clock_uncertainty='27%',
         io_type='io_parallel',
+        n_pack=1,
         namespace=None,
         write_weights_txt=True,
         write_tar=False,
@@ -94,6 +95,7 @@ class VitisBackend(VivadoBackend):
         config['ClockPeriod'] = clock_period if clock_period is not None else 5
         config['ClockUncertainty'] = clock_uncertainty if clock_uncertainty is not None else '27%'
         config['IOType'] = io_type if io_type is not None else 'io_parallel'
+        config['StreamPackFactor'] = n_pack
         config['HLSConfig'] = {}
         config['WriterConfig'] = {
             'Namespace': namespace,

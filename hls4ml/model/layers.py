@@ -65,6 +65,7 @@ class Layer(Serializable):
         Attribute('index', description=descriptions.index),
         ConfigurableAttribute('trace', default=False, description=descriptions.trace),
         TypeAttribute('result', description=descriptions.result_type),
+        ConfigurableAttribute('out_stream_depth', value_type=int, default=0),
     ]
 
     @classproperty
