@@ -288,6 +288,11 @@ void global_pooling1d_cl(hls::stream<data_T> &data, hls::stream<res_T> &res) {
     assert(CONFIG_T::pad_left == 0 && CONFIG_T::pad_right == 0);
     assert(CONFIG_T::pool_width == CONFIG_T::stride_width);
 
+    typedef nnet::array<typename data_T::value_type, CONFIG_T::n_filt> data_pack_t;
+
+    constexpr unsigned n_pack = data_T::size / CONFIG_T::n_filt;
+    constexpr unsigned n_iterations = CONFIG_T::n_in / n_pack;
+
     typename CONFIG_T::accum_t data_window[CONFIG_T::n_filt];
     #pragma HLS ARRAY_PARTITION variable=data_window complete
 
@@ -303,16 +308,32 @@ PoolInitLoop:
     }
 
 ReadInput:
-    for (unsigned i_iw = 0; i_iw < CONFIG_T::n_in / (data_T::size / CONFIG_T::n_filt); i_iw++) {
-        #pragma HLS LOOP_FLATTEN
-        compute_global_pool<data_T, res_T, CONFIG_T>(data.read(), data_window);
+    for (unsigned i_iw = 0; i_iw < n_iterations; i_iw++) {
+        #pragma HLS PIPELINE II=1
+
+        data_T packed_data = data.read();
+
+    ProcessPack:
+        for (unsigned p = 0; p < n_pack; p++) {
+            #pragma HLS UNROLL
+
+            data_pack_t data_pack;
+            #pragma HLS ARRAY_PARTITION variable=data_pack.data complete
+
+        ExtractFeatures:
+            for (unsigned f = 0; f < CONFIG_T::n_filt; f++) {
+                #pragma HLS UNROLL
+                data_pack[f] = packed_data[p * CONFIG_T::n_filt + f];
+            }
+
+            compute_global_pool<data_pack_t, res_T, CONFIG_T>(data_pack, data_window);
+        }
     }
 
     if (CONFIG_T::pool_op == Max) {
     MaxPoolRes:
         for (unsigned i_res = 0; i_res < CONFIG_T::n_filt / res_T::size; i_res++) {
             #pragma HLS PIPELINE
-
             res_T res_pack;
             PRAGMA_DATA_PACK(res_pack)
         MaxPoolPack:
@@ -326,7 +347,6 @@ ReadInput:
     AvgPoolRes:
         for (unsigned i_res = 0; i_res < CONFIG_T::n_filt / res_T::size; i_res++) {
             #pragma HLS PIPELINE
-
             res_T res_pack;
             PRAGMA_DATA_PACK(res_pack)
         AvgPoolPack:

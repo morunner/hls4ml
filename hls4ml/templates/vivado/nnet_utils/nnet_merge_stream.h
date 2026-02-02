@@ -308,6 +308,11 @@ ConcatLoopHeight2:
 template <class input1_T, class input2_T, class res_T, typename CONFIG_T>
 void concatenate2d_1(hls::stream<input1_T> &data1, hls::stream<input2_T> &data2, hls::stream<res_T> &res) {
 
+    constexpr unsigned n_pack = input1_T::size / CONFIG_T::n_elem1_1;
+
+    constexpr unsigned n_feat1 = CONFIG_T::n_elem1_1;
+    constexpr unsigned n_feat2 = CONFIG_T::n_elem2_1;
+
     constexpr unsigned n_iterations = (CONFIG_T::n_elem1_0 * CONFIG_T::n_elem1_1) / input1_T::size;
 
 ConcatLoopHeight:
@@ -319,16 +324,19 @@ ConcatLoopHeight:
         res_T out_data;
         PRAGMA_DATA_PACK(out_data)
 
-    ConcatPackInput1:
-        for (int k = 0; k < input1_T::size; k++) {
+    InterleavePack:
+        for (unsigned p = 0; p < n_pack; p++) {
             #pragma HLS UNROLL
-            out_data[k] = in_data1[k];
-        }
 
-    ConcatPackInput2:
-        for (int k = 0; k < input2_T::size; k++) {
-            #pragma HLS UNROLL
-            out_data[input1_T::size + k] = in_data2[k];
+            for (unsigned f1 = 0; f1 < n_feat1; f1++) {
+                #pragma HLS UNROLL
+                out_data[p * (n_feat1 + n_feat2) + f1] = in_data1[p * n_feat1 + f1];
+            }
+
+            for (unsigned f2 = 0; f2 < n_feat2; f2++) {
+                #pragma HLS UNROLL
+                out_data[p * (n_feat1 + n_feat2) + n_feat1 + f2] = in_data2[p * n_feat2 + f2];
+            }
         }
 
         res.write(out_data);
