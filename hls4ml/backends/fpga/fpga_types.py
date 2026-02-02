@@ -362,6 +362,12 @@ class StreamVariableConverter:
 
         if depth == 0:
             depth = np.prod(tensor_var.shape) // tensor_var.shape[-1]
+
+        # TODO: This is currently hardcoded for a specific GravNet model for now. Make this dynamically
+        #       configurable through hls_config
+        if tensor_var.name == 'layer65_cpy3' or tensor_var.name == 'layer66_cpy3':
+            depth *= 8
+
         tensor_var.pragma = ('stream', depth)
         tensor_var.type = self.type_converter.convert(
             PackedType(tensor_var.type.name, tensor_var.type.precision, tensor_var.shape[-1], n_pack)
