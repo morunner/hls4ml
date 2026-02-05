@@ -410,6 +410,30 @@ class CoyoteAcceleratorWriter(VitisWriter):
                     ]
                 for stream in streams_to_tie_off:
                     newline += indent + stream
+            elif '// hls-fpga-machine-learning insert ila' in line:
+                newline = ''
+                probe_idx = 1
+                for i, _inp in enumerate(model_inputs):
+                    newline += indent + f'.probe{probe_idx}(axis_host_recv[{i}].tvalid),  // 1 bit\n'
+                    newline += indent + f'.probe{probe_idx + 1}(axis_host_recv[{i}].tready),  // 1 bit\n'
+                    newline += indent + f'.probe{probe_idx + 2}(axis_host_recv[{i}].tlast),   // 1 bit\n'
+
+                    is_last_input = i == len(model_inputs) - 1
+                    has_outputs = len(model_outputs) > 0
+                    comma = ',' if (not is_last_input) or has_outputs else ''
+
+                    newline += indent + f'.probe{probe_idx + 3}(axis_host_recv[{i}].tdata){comma}   // 512 bits\n'
+                    probe_idx += 4
+                for i, _out in enumerate(model_outputs):
+                    newline += indent + f'.probe{probe_idx}(axis_host_send[{i}].tvalid),  // 1 bit\n'
+                    newline += indent + f'.probe{probe_idx + 1}(axis_host_send[{i}].tready),  // 1 bit\n'
+                    newline += indent + f'.probe{probe_idx + 2}(axis_host_send[{i}].tlast),   // 1 bit\n'
+
+                    is_last_output = i == len(model_outputs) - 1
+                    comma = '' if is_last_output else ','
+
+                    newline += indent + f'.probe{probe_idx + 3}(axis_host_send[{i}].tdata){comma}    // 512 bits\n'
+                    probe_idx += 4
             else:
                 newline = line
 
@@ -418,9 +442,39 @@ class CoyoteAcceleratorWriter(VitisWriter):
         f.close()
         fout.close()
 
-        # init_ip.tcl for any additional IPs that may be needed for the model (e.g., ILA for debugging) --- UNUSED FOR NOW
-        # srcpath = (filedir / '../templates/coyote_accelerator/init_ip.tcl').resolve()
-        # dstpath = f'{model.config.get_output_dir()}/src/init_ip.tcl'
+        # init_ip.tcl
+        n_streams = len(model_inputs) + len(model_outputs)
+        total_probes = 1 + (n_streams * 4)
+
+        config_list = [f'CONFIG.C_NUM_OF_PROBES {{{total_probes}}}']
+        config_list.append('CONFIG.C_PROBE0_WIDTH {64}')
+
+        current_probe_idx = 1
+
+        for _ in range(n_streams):
+            # Data streams are 512 bits wide
+            data_probe_idx = current_probe_idx + 3
+            config_list.append(f'CONFIG.C_PROBE{data_probe_idx}_WIDTH {{512}}')
+            current_probe_idx += 4
+
+        config_list.append('CONFIG.C_EN_STRG_QUAL {1}')
+        config_list.append('CONFIG.ALL_PROBE_SAME_MU_CNT {2}')
+
+        tcl_properties = ' '.join(config_list)
+
+        f_tcl = open(os.path.join(filedir, '../templates/coyote_accelerator/init_ip.tcl'))
+        fout_tcl = open(f'{model.config.get_output_dir()}/src/init_ip.tcl', 'w')
+
+        for line in f_tcl.readlines():
+            if '// hls-fpga-machine-learning insert ila-properties' in line:
+                indent = ' ' * (len(line) - len(line.lstrip(' ')))
+                newline = indent + f'set_property -dict [list {tcl_properties}] [get_ips ila_perf_host]\n'
+                fout_tcl.write(newline)
+            else:
+                fout_tcl.write(line)
+
+        f_tcl.close()
+        fout_tcl.close()
 
     def write_host_code(self, model):
         """

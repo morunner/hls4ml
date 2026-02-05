@@ -18,3 +18,18 @@ always_comb cq_rd.tie_off_s();
 always_comb cq_wr.tie_off_s();
 always_comb notify.tie_off_m();
 always_comb axi_ctrl.tie_off_s();
+
+logic [63:0] cnt;
+always_ff @(posedge aclk) begin
+   if (aresetn == 1'b0) begin
+     cnt <= '0;
+   end else begin
+      cnt <= cnt + 1;
+   end
+end
+
+ila_perf_host inst_ila_perf_host (
+    .clk(aclk),
+    .probe0(cnt),
+    // hls-fpga-machine-learning insert ila
+);
