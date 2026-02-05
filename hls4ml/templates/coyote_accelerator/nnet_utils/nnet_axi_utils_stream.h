@@ -61,11 +61,8 @@ void axi_stream_to_data(hls::stream<ap_axiu<AXI_BITS, 0, 0, 0>> &axi_in, hls::st
 
     constexpr const unsigned int ELEMENTS_PER_AXI = AXI_BITS / PRECISION;
     constexpr const unsigned int NUM_BEATS = (SIZE + ELEMENTS_PER_AXI - 1) / ELEMENTS_PER_AXI;
-    constexpr const unsigned int OUTPUT_PACK_SIZE = array_T::size;
 
     array_T tmp_pack;
-    #pragma HLS DATA_PACK variable = tmp_pack
-
     unsigned int pack_idx = 0;
 
     for (unsigned int i = 0; i < NUM_BEATS; i++) {
@@ -92,7 +89,7 @@ void axi_stream_to_data(hls::stream<ap_axiu<AXI_BITS, 0, 0, 0>> &axi_in, hls::st
                 tmp_pack[pack_idx] = fixed_val;
                 pack_idx++;
 
-                if (pack_idx == OUTPUT_PACK_SIZE) {
+                if (pack_idx == array_T::size) {
                     data_out.write(tmp_pack);
                     pack_idx = 0;
                 }
