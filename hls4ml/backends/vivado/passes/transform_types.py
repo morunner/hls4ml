@@ -23,14 +23,7 @@ class TransformTypes(GlobalOptimizerPass):
 
         for out_name, var in node.variables.items():
             if io_type == 'io_stream':
-                # TODO: This is currently hardcoded for a specific GravNet model for now. Make this dynamically
-                #       configurable through hls_config
-                if (
-                    node.class_name == 'GlobalPooling1D'
-                    or out_name == 'classification'
-                    or out_name == 'regression'
-                    or out_name == 'classification_quantized_sigmoid'
-                ):
+                if len(node.get_output_variable().shape) == 1:
                     n_pack = 1
                 else:
                     n_pack = node.model.config.get_config_value('StreamPackFactor')
