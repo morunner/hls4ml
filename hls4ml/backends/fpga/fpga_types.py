@@ -366,7 +366,7 @@ class StreamVariableConverter:
         # TODO: This is currently hardcoded for a specific GravNet model for now. Make this dynamically
         #       configurable through hls_config
         if tensor_var.name == 'layer65_cpy3' or tensor_var.name == 'layer66_cpy3':
-            depth *= 8
+            depth *= 2
 
         tensor_var.pragma = ('stream', depth)
         tensor_var.type = self.type_converter.convert(
