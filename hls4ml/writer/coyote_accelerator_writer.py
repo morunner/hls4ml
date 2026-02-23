@@ -343,11 +343,11 @@ class CoyoteAcceleratorWriter(VitisWriter):
             elif '// hls-fpga-machine-learning insert top-level function' in line:
                 newline = ''
 
-                for inp in model_inputs:
+                for i, inp in enumerate(model_inputs):
                     newline += (
                         indent
                         + f'nnet::axi_stream_to_data<{inp.type.name}, float, {inp.size_cpp()}, COYOTE_AXI_STREAM_BITS, '
-                        '8 * sizeof(float)>(data_in{i}, {inp.name});\n'
+                        f'8 * sizeof(float)>(data_in{i}, {inp.name});\n'
                     )
 
                 input_vars = ','.join([i.name for i in model_inputs])
@@ -356,11 +356,11 @@ class CoyoteAcceleratorWriter(VitisWriter):
                 top_level = indent + f'{model.config.get_project_name()}({all_vars});\n'
                 newline += top_level
 
-                for out in model_outputs:
+                for i, out in enumerate(model_outputs):
                     newline += (
                         indent
                         + f'nnet::data_to_axi_stream<{out.type.name}, float, {out.size_cpp()}, COYOTE_AXI_STREAM_BITS, '
-                        '8 * sizeof(float)>({out.name}, data_out{i});\n'
+                        f'8 * sizeof(float)>({out.name}, data_out{i});\n'
                     )
 
             else:
@@ -578,7 +578,7 @@ class CoyoteAcceleratorWriter(VitisWriter):
                     newline += (
                         indent
                         + f'nnet::data_to_axi_stream<{inp.type.name}, float, {inp.size_cpp()}, COYOTE_AXI_STREAM_BITS, '
-                        '8 * sizeof(float)>({inp.name}, data_in{i});\n'
+                        f'8 * sizeof(float)>({inp.name}, data_in{i});\n'
                     )
                     offset += inp.size()
                 for i, out in enumerate(model_outputs):
@@ -594,7 +594,7 @@ class CoyoteAcceleratorWriter(VitisWriter):
                     newline += (
                         indent
                         + f'nnet::data_to_axi_stream<{inp.type.name}, float, {inp.size_cpp()}, COYOTE_AXI_STREAM_BITS, '
-                        '8 * sizeof(float)>({inp.name}, data_in{i});\n'
+                        f'8 * sizeof(float)>({inp.name}, data_in{i});\n'
                     )
 
                 for i, out in enumerate(model_outputs):
@@ -608,11 +608,11 @@ class CoyoteAcceleratorWriter(VitisWriter):
 
                 newline = line
                 newline += indent + f'model_wrapper({model_wrapper_args});\n'
-                for out in model_outputs:
+                for i, out in enumerate(model_outputs):
                     newline += (
                         indent
                         + f'nnet::axi_stream_to_data<{out.type.name}, float, {out.size_cpp()}, COYOTE_AXI_STREAM_BITS, '
-                        '8 * sizeof(float)>(data_out{i}, {out.name});\n'
+                        f'8 * sizeof(float)>(data_out{i}, {out.name});\n'
                     )
 
             elif '// hls-fpga-machine-learning insert predictions' in line:
