@@ -31,12 +31,18 @@ if(FLOW STREQUAL "sw")
     target_link_libraries(CoyoteInference PUBLIC Coyote)
     target_link_directories(CoyoteInference PUBLIC /usr/local/lib)
 
+    find_package(Boost REQUIRED COMPONENTS program_options)
+
     project(myproject)
     set(EXEC test)
     set(TARGET_DIR "${CMAKE_SOURCE_DIR}/src/")
     add_executable(${EXEC} ${TARGET_DIR}/myproject_host.cpp)
+
+    target_include_directories(${EXEC} PRIVATE ${Boost_INCLUDE_DIRS})
+
     target_link_libraries(${EXEC} PUBLIC Coyote)
     target_link_libraries(${EXEC} PUBLIC CoyoteInference)
+    target_link_libraries(${EXEC} PUBLIC Boost::program_options)
     target_link_directories(${EXEC} PUBLIC /usr/local/lib)
     target_include_directories(${EXEC} PUBLIC src/hls/model_wrapper/firmware/)
     target_include_directories(${EXEC} PUBLIC src/hls/model_wrapper/firmware/ap_types)

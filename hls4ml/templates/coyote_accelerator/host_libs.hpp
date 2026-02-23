@@ -1,8 +1,8 @@
 #ifndef HOST_LIBS_HPP_
 #define HOST_LIBS_HPP_
 
-#include "cOps.hpp"
-#include "cThread.hpp"
+#include "coyote/cOps.hpp"
+#include "coyote/cThread.hpp"
 #include <vector>
 
 // Coyote uses so-called vFPGAs: individual applications running in parallel on

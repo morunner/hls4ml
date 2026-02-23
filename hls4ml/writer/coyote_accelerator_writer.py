@@ -618,9 +618,8 @@ class CoyoteAcceleratorWriter(VitisWriter):
             elif '// hls-fpga-machine-learning insert predictions' in line:
                 newline = line
                 for i in range(len(model_outputs)):
-                    begin = sum([int(outp.size_cpp()) for outp in model_outputs[:i]])
-                    end = sum([int(outp.size_cpp()) for outp in model_outputs[: i + 1]])
-                    newline += indent + f'for (unsigned int i = {str(begin)}; i < {str(end)}; i++) {{\n'
+                    begin = sum([int(outp.size()) for outp in model_outputs[:i]])
+                    end = sum([int(outp.size()) for outp in model_outputs[: i + 1]])
                     newline += indent + f'for (unsigned int i = {str(begin)}; i < {str(end)}; i++) {{\n'
                     newline += indent + '   std::cout << pr[i] << " ";\n'
                     newline += indent + '}\n'
