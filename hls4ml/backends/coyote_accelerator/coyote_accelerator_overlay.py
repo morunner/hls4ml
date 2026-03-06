@@ -25,7 +25,16 @@ class CoyoteOverlay:
         self.project_name = project_name
 
         # Set up dynamic C library
-        self.coyote_lib = ctypes.cdll.LoadLibrary(f'{self.path}/build/{self.project_name}_cyt_sw/lib/libCoyoteInference.so')
+        coyote_lib_path = f'{self.path}/build/{self.project_name}_cyt_sw/libCoyoteInference.so'  # Newer Coyote version
+        coyote_lib_legacy_path = f'{self.path}/build/{self.project_name}_cyt_sw/lib/libCoyoteInference.so'
+        try:
+            self.coyote_lib = ctypes.cdll.LoadLibrary(coyote_lib_path)
+        except OSError:
+            logging.info(
+                f'Could not locate Coyote Inference Library at {coyote_lib_path}, '
+                'trying to load from legacy path {coyote_lib_legacy_path}'
+            )
+            self.coyote_lib = ctypes.cdll.LoadLibrary(coyote_lib_legacy_path)
 
         self.coyote_lib.init_model_inference.argtypes = [
             ctypes.c_uint,
@@ -57,7 +66,8 @@ class CoyoteOverlay:
             f'cd {self.path}/Coyote/driver && '
             f'make && '
             f'cd ../util && '
-            f'bash program_hacc_local.sh ../../build/{self.project_name}_cyt_hw/bitstreams/cyt_top.bit ../driver/build/coyote_driver.ko'
+            f'bash program_hacc_local.sh ../../build/{self.project_name}_cyt_hw/bitstreams/cyt_top.bit'
+            ' ../driver/build/coyote_driver.ko'
         )
 
     def predict(self, X: np.array, y_shape: tuple, batch_size: int = 1):
