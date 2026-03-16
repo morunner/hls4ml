@@ -102,7 +102,7 @@ class CoyoteOverlay:
         if not (isinstance(X.dtype, float) or isinstance(X.dtype, np.float32)):
             logging.warning('CoyoteOverlay only supports (for now) floating-point inputs; casting input data to float')
             X = X.astype(np.float32)
-        y = np.empty((len(X), *y_shape))
+        y = np.zeros((len(X), *y_shape), dtype=np.float32)
         np_pointer_nd = np.ctypeslib.ndpointer(dtype=np.float32, ndim=len(X[0].shape), flags='C')
         self.coyote_lib.set_inference_data.argtypes = [ctypes.POINTER(ctypes.c_void_p), np_pointer_nd, ctypes.c_uint]
 
@@ -110,21 +110,21 @@ class CoyoteOverlay:
         model = self.coyote_lib.init_model_inference(batch_size, int(np.prod(X[0].shape)), out_sizes, y_shape[0])
 
         cnt = 0
-        avg_latency = 0
-        avg_throughput = 0
+        total_time_ns = 0
         total_batches = 0
+
         for x in X:
             self.coyote_lib.set_inference_data(model, x, cnt)
             cnt += 1
             if cnt == batch_size:
                 self.coyote_lib.flush(model)
 
-                ts = time.time_ns()
+                ts = time.perf_counter_ns()
                 self.coyote_lib.predict(model)
-                te = time.time_ns()
+                te = time.perf_counter_ns()
+
                 time_taken = te - ts
-                avg_latency += time_taken / 1e3
-                avg_throughput += batch_size / (time_taken * 1e-9)
+                total_time_ns += time_taken
 
                 for j in range(batch_size):
                     tmp = np.zeros(y_shape, dtype=np.float32)
@@ -135,8 +135,16 @@ class CoyoteOverlay:
                 total_batches += 1
 
         self.coyote_lib.free_model_inference(model)
-        print(f'Batch size: {batch_size}; batches processed: {total_batches}')
-        print(f'Mean latency: {round(avg_latency / total_batches, 3)}us (inference only)')
-        print(f'Mean throughput: {round(avg_throughput / total_batches, 1)} samples/s (inference only)')
 
-        return y
+        total_time_sec = total_time_ns * 1e-9
+        total_time_us = total_time_ns / 1e3
+        total_samples = total_batches * batch_size
+
+        mean_batch_latency = total_time_us / total_batches if total_batches > 0 else 0
+        true_throughput = total_samples / total_time_sec if total_time_sec > 0 else 0
+
+        print(f'Batch size: {batch_size}; batches processed: {total_batches}')
+        print(f'Mean batch latency: {round(mean_batch_latency, 3)} us (inference only)')
+        print(f'Mean throughput: {round(true_throughput, 1)} samples/s (inference only)')
+
+        return y, mean_batch_latency, true_throughput
