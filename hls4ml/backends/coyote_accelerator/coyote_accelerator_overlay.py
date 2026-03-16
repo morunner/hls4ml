@@ -1,6 +1,7 @@
 import ctypes
 import logging
 import os
+import subprocess
 import time
 
 import numpy as np
@@ -24,17 +25,7 @@ class CoyoteOverlay:
         self.path = path
         self.project_name = project_name
 
-        # Set up dynamic C library
-        coyote_lib_path = f'{self.path}/build/{self.project_name}_cyt_sw/libCoyoteInference.so'  # Newer Coyote version
-        coyote_lib_legacy_path = f'{self.path}/build/{self.project_name}_cyt_sw/lib/libCoyoteInference.so'
-        try:
-            self.coyote_lib = ctypes.cdll.LoadLibrary(coyote_lib_path)
-        except OSError:
-            logging.info(
-                f'Could not locate Coyote Inference Library at {coyote_lib_path}, '
-                'trying to load from legacy path {coyote_lib_legacy_path}'
-            )
-            self.coyote_lib = ctypes.cdll.LoadLibrary(coyote_lib_legacy_path)
+        self.load_coyote_library()
 
         self.coyote_lib.init_model_inference.argtypes = [
             ctypes.c_uint,
@@ -54,6 +45,33 @@ class CoyoteOverlay:
         ]
 
         self.coyote_lib.free_model_inference.argtypes = [ctypes.POINTER(ctypes.c_void_p)]
+
+    def load_coyote_library(self):
+        try:
+            logging.info(f'Compiling libCoyoteInference.so at {self.path}...')
+            subprocess.run(['make'], cwd=self.path, check=True, capture_output=True, text=True)
+            logging.info('Build successful.')
+        except subprocess.CalledProcessError as e:
+            logging.error(f'Make failed with error:\n{e.stderr}')
+        except FileNotFoundError:
+            logging.error("The 'make' command was not found. Is it installed and in your PATH?")
+
+        build_base = f'{self.path}/build/{self.project_name}_cyt_sw'
+        coyote_lib_path = f'{build_base}/libCoyoteInference.so'
+        coyote_lib_legacy_path = f'{build_base}/lib/libCoyoteInference.so'
+
+        try:
+            self.coyote_lib = ctypes.cdll.LoadLibrary(coyote_lib_path)
+        except OSError:
+            logging.info(
+                f'Could not locate Coyote Inference Library at {coyote_lib_path}, '
+                f'trying to load from legacy path {coyote_lib_legacy_path}'
+            )
+            try:
+                self.coyote_lib = ctypes.cdll.LoadLibrary(coyote_lib_legacy_path)
+            except OSError:
+                logging.critical('Failed to load Coyote Inference Library from both paths.')
+                raise
 
     def program_hacc_fpga(self):
         """
